@@ -55,7 +55,7 @@ steps:
       - event: push
 
   release-forgejo:
-    image: goreleaser/goreleaser:v2.13.3
+    image: goreleaser/goreleaser:v2.14.3
     depends_on:
       - fmt
       - lint
