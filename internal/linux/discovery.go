@@ -156,6 +156,7 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 	}
 
 	disk.Health, disk.Problem, disk.ProblemDetails, disk.ProblemNote = classifyProblem(disk)
+	disk.RemovalObstacle = removalObstacleDetails(disk.Usage)
 
 	return disk
 }
@@ -406,12 +407,6 @@ func classifyProblem(d domain.Disk) (domain.Health, string, string, string) {
 	if d.Smart.ReadError != "" {
 		return domain.HealthWarning, "SMART read failure", d.Smart.ReadError, d.Smart.ReadError
 	}
-	if d.Usage.Mounted || d.Usage.Swap {
-		return domain.HealthWarning, "mounted", usageProblemDetails(d.Usage), "device is in active use"
-	}
-	if d.Usage.RAIDMember || d.Usage.DMHolder {
-		return domain.HealthWarning, "raid member", usageProblemDetails(d.Usage), "device has holders and may be in mdraid or device-mapper"
-	}
 
 	if severeCount(d.Smart.ReallocatedSectors) || severeCount(d.Smart.PendingSectors) || severeCount(d.Smart.UncorrectableErrors) {
 		return domain.HealthFailing, "disk failure", smartProblemDetails(d.Smart), "critical SMART counters are non-zero"
@@ -453,6 +448,10 @@ func usageProblemDetails(usage domain.UsageFlags) string {
 	}
 
 	return strings.Join(parts, "; ")
+}
+
+func removalObstacleDetails(usage domain.UsageFlags) string {
+	return usageProblemDetails(usage)
 }
 
 func smartProblemDetails(info domain.SmartInfo) string {

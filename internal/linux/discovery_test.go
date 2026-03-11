@@ -83,22 +83,38 @@ func TestClassifyProblemIncludesKernelUsageDetails(t *testing.T) {
 	t.Parallel()
 
 	health, problem, details, note := classifyProblem(domain.Disk{
+		Smart: domain.SmartInfo{
+			Available: true,
+		},
 		Usage: domain.UsageFlags{
 			Mounted: true,
 			Swap:    true,
 		},
 	})
 
-	if health != domain.HealthWarning {
-		t.Fatalf("health = %q, want %q", health, domain.HealthWarning)
+	if health != domain.HealthHealthy {
+		t.Fatalf("health = %q, want %q", health, domain.HealthHealthy)
 	}
-	if problem != "mounted" {
-		t.Fatalf("problem = %q, want %q", problem, "mounted")
+	if problem != "—" {
+		t.Fatalf("problem = %q, want %q", problem, "—")
 	}
-	if details != "mounted; swap active" {
+	if details != "" {
 		t.Fatalf("details = %q", details)
 	}
-	if note != "device is in active use" {
+	if note != "" {
 		t.Fatalf("note = %q", note)
+	}
+}
+
+func TestRemovalObstacleDetailsIncludesKernelUsageDetails(t *testing.T) {
+	t.Parallel()
+
+	details := removalObstacleDetails(domain.UsageFlags{
+		Mounted: true,
+		Swap:    true,
+	})
+
+	if details != "mounted; swap active" {
+		t.Fatalf("details = %q", details)
 	}
 }

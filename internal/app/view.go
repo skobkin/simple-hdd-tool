@@ -110,49 +110,110 @@ func (m *Model) renderDetails() string {
 	case domain.HealthFailing:
 		health = m.styles.bad.Render(health)
 	}
-	lines := []string{
-		m.styles.header.Render("Disk Details"),
-		"",
-		"Family: " + disk.Family,
-		"Model: " + disk.Model,
-		"Size: " + format.SizeBytes(disk.SizeBytes),
-		"Serial: " + disk.Serial,
-		"Block device: " + disk.DevicePath,
-		"Time: " + format.DurationHours(disk.Smart.PowerOnHours),
-		"Health: " + health,
-		"Problem: " + fallback(disk.Problem),
+	lines := []string{m.styles.header.Render("Disk Details")}
+
+	sections := []detailSection{
+		{
+			Title: "Identity",
+			Lines: []string{
+				"Family: " + disk.Family,
+				"Model: " + disk.Model,
+				"Size: " + format.SizeBytes(disk.SizeBytes),
+				"Serial: " + disk.Serial,
+				"Block device: " + disk.DevicePath,
+			},
+		},
+		{
+			Title: "Health",
+			Lines: []string{
+				"Time: " + format.DurationHours(disk.Smart.PowerOnHours),
+				"Health: " + health,
+				"Problem: " + fallback(disk.Problem),
+			},
+		},
+		{
+			Title: "SMART",
+			Lines: []string{
+				metricLine("Temperature", disk.Smart.TemperatureC, " C"),
+				metricLine("Reallocated sectors", disk.Smart.ReallocatedSectors, ""),
+				metricLine("Pending sectors", disk.Smart.PendingSectors, ""),
+				metricLine("Reported uncorrectable errors", disk.Smart.UncorrectableErrors, ""),
+				metricLine("Start/stop count", disk.Smart.StartStopCount, ""),
+				metricLine("Power cycle count", disk.Smart.PowerCycleCount, ""),
+			},
+		},
+		{
+			Title: "Removal / Usage",
+			Lines: []string{
+				optionalLine("Removal obstacle", disk.RemovalObstacle),
+			},
+		},
 	}
+
 	if disk.ProblemDetails != "" {
-		lines = append(lines, "Problem details: "+disk.ProblemDetails)
-	}
-	if disk.Smart.TemperatureC != nil {
-		lines = append(lines, fmt.Sprintf("Temperature: %d C", *disk.Smart.TemperatureC))
-	}
-	if disk.Smart.ReallocatedSectors != nil {
-		lines = append(lines, fmt.Sprintf("Reallocated sectors: %d", *disk.Smart.ReallocatedSectors))
-	}
-	if disk.Smart.PendingSectors != nil {
-		lines = append(lines, fmt.Sprintf("Pending sectors: %d", *disk.Smart.PendingSectors))
-	}
-	if disk.Smart.UncorrectableErrors != nil {
-		lines = append(lines, fmt.Sprintf("Reported uncorrectable errors: %d", *disk.Smart.UncorrectableErrors))
-	}
-	if disk.Smart.StartStopCount != nil {
-		lines = append(lines, fmt.Sprintf("Start/stop count: %d", *disk.Smart.StartStopCount))
-	}
-	if disk.Smart.PowerCycleCount != nil {
-		lines = append(lines, fmt.Sprintf("Power cycle count: %d", *disk.Smart.PowerCycleCount))
+		sections[1].Lines = append(sections[1].Lines, "Problem details: "+disk.ProblemDetails)
 	}
 	if disk.ProblemNote != "" {
-		lines = append(lines, "Note: "+disk.ProblemNote)
+		sections[1].Lines = append(sections[1].Lines, "Note: "+disk.ProblemNote)
 	}
 	if disk.Usage.ChecksPartial {
-		lines = append(lines, "Warning: Could not fully verify device usage; proceed carefully")
+		sections[3].Lines = append(sections[3].Lines, "Warning: Could not fully verify device usage; proceed carefully")
+	}
+
+	for _, section := range sections {
+		rendered := m.renderDetailSection(section)
+		if len(rendered) == 0 {
+			continue
+		}
+		lines = append(lines, "")
+		lines = append(lines, rendered...)
 	}
 
 	lines = append(lines, "", m.renderDetailActions(disk), "Left/Right or Tab select  Enter activate  Esc back")
 
 	return m.styles.box.Render(strings.Join(lines, "\n"))
+}
+
+type detailSection struct {
+	Title string
+	Lines []string
+}
+
+func (m *Model) renderDetailSection(section detailSection) []string {
+	lines := compactLines(section.Lines)
+	if len(lines) == 0 {
+		return nil
+	}
+
+	return append([]string{m.styles.header.Render(section.Title)}, lines...)
+}
+
+func compactLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		out = append(out, line)
+	}
+
+	return out
+}
+
+func optionalLine(label, value string) string {
+	if value == "" {
+		return ""
+	}
+
+	return label + ": " + value
+}
+
+func metricLine(label string, value *uint64, suffix string) string {
+	if value == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%s: %d%s", label, *value, suffix)
 }
 
 func (m *Model) renderReadLoad() string {

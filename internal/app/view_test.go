@@ -65,8 +65,73 @@ func TestRenderDetailsShowsProblemDetails(t *testing.T) {
 
 	out := m.renderDetails()
 
+	assertSubstringsInOrder(t, out, "Identity", "Health", "Problem details: pending sectors=2; SMART error log count=1")
 	if !strings.Contains(out, "Problem details: pending sectors=2; SMART error log count=1") {
 		t.Fatalf("renderDetails() did not include problem details:\n%s", out)
+	}
+}
+
+func TestRenderDetailsShowsRemovalObstacleSeparately(t *testing.T) {
+	temp := uint64(31)
+	m := NewModel(Config{})
+	m.mode = viewDetails
+	m.disks = []domain.Disk{{
+		ID:              "disk-1",
+		Family:          "Family",
+		Model:           "Model",
+		Serial:          "Serial",
+		DevicePath:      "/dev/sdb",
+		Health:          domain.HealthHealthy,
+		Problem:         "—",
+		RemovalObstacle: "mounted; swap active",
+		Smart: domain.SmartInfo{
+			TemperatureC: &temp,
+		},
+	}}
+	m.rebuildRows()
+
+	out := m.renderDetails()
+
+	assertSubstringsInOrder(t, out, "Health", "Problem: —", "SMART", "Temperature: 31 C", "Removal / Usage", "Removal obstacle: mounted; swap active")
+	if !strings.Contains(out, "Removal obstacle: mounted; swap active") {
+		t.Fatalf("renderDetails() did not include removal obstacle:\n%s", out)
+	}
+	if strings.Contains(out, "Problem: mounted") {
+		t.Fatalf("renderDetails() rendered removal obstacle as problem:\n%s", out)
+	}
+}
+
+func TestRenderDetailsOmitsEmptySmartSection(t *testing.T) {
+	m := NewModel(Config{})
+	m.mode = viewDetails
+	m.disks = []domain.Disk{{
+		ID:         "disk-1",
+		Family:     "Family",
+		Model:      "Model",
+		Serial:     "Serial",
+		DevicePath: "/dev/sdb",
+		Health:     domain.HealthHealthy,
+		Problem:    "—",
+	}}
+	m.rebuildRows()
+
+	out := m.renderDetails()
+
+	if strings.Contains(out, "SMART") {
+		t.Fatalf("renderDetails() rendered empty SMART section:\n%s", out)
+	}
+}
+
+func assertSubstringsInOrder(t *testing.T, text string, substrings ...string) {
+	t.Helper()
+
+	offset := 0
+	for _, substring := range substrings {
+		idx := strings.Index(text[offset:], substring)
+		if idx < 0 {
+			t.Fatalf("expected %q after offset %d in output:\n%s", substring, offset, text)
+		}
+		offset += idx + len(substring)
 	}
 }
 
