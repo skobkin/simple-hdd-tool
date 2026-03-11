@@ -165,7 +165,7 @@ func (m *Model) renderReadLoad() string {
 	if snap.DirectIOMessage != "" {
 		lines = append(lines, "Note: "+snap.DirectIOMessage)
 	}
-	lines = append(lines, "s Stop  Esc Stop  q Stop")
+	lines = append(lines, "", m.styles.focused.Render("Stop"))
 
 	return m.wrapModal("Read Load", lines)
 }

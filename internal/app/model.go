@@ -317,7 +317,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case viewReadLoad:
 		switch msg.String() {
-		case "s", "esc", "q":
+		case "enter", "s", "esc", "q":
 			if m.readLoader != nil {
 				m.readLoader.Stop()
 				m.readLoader = nil

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
+	"github.com/skobkin/simple-hdd-tool/internal/linux"
 )
 
 func TestRenderDiskRowStaysSingleLine(t *testing.T) {
@@ -44,5 +45,20 @@ func TestRenderDetailsShowsProblemDetails(t *testing.T) {
 
 	if !strings.Contains(out, "Problem details: pending sectors=2; SMART error log count=1") {
 		t.Fatalf("renderDetails() did not include problem details:\n%s", out)
+	}
+}
+
+func TestRenderReadLoadShowsStopButton(t *testing.T) {
+	m := NewModel(Config{})
+	m.mode = viewReadLoad
+	m.readLoader = &linux.ReadLoader{}
+
+	out := m.renderReadLoad()
+
+	if !strings.Contains(out, "Stop") {
+		t.Fatalf("renderReadLoad() did not include stop button:\n%s", out)
+	}
+	if strings.Contains(out, "Enter stop") {
+		t.Fatalf("renderReadLoad() still included removed stop hint:\n%s", out)
 	}
 }
