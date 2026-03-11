@@ -58,6 +58,7 @@ const (
 	detailActionCount
 )
 
+// Model owns the Bubble Tea application state.
 type Model struct {
 	cfg      Config
 	width    int
@@ -95,6 +96,7 @@ type styles struct {
 	danger   lipgloss.Style
 }
 
+// NewModel builds the initial UI model from CLI config.
 func NewModel(cfg Config) *Model {
 	return &Model{
 		cfg:    cfg,
@@ -120,6 +122,7 @@ func newStyles(noColor bool) styles {
 			danger:   lipgloss.NewStyle().Bold(true).Padding(0, 1),
 		}
 	}
+
 	return styles{
 		header:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")),
 		banner:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")),
@@ -136,6 +139,7 @@ func newStyles(noColor bool) styles {
 	}
 }
 
+// Init starts the initial disk scan.
 func (m *Model) Init() tea.Cmd {
 	return m.startScan()
 }
@@ -146,12 +150,14 @@ func (m *Model) startScan() tea.Cmd {
 		result:   make(chan domain.ScanResult, 1),
 	}
 	m.scanRunner = runner
+
 	return tea.Batch(func() tea.Msg {
 		go func() {
 			result := linux.Scanner{PerDiskTimeout: 3 * time.Second}.Scan(context.Background(), runner.progress)
 			runner.result <- result
 			close(runner.progress)
 		}()
+
 		return nil
 	}, waitScanProgress(runner.progress), waitScanResult(runner.result))
 }
@@ -162,6 +168,7 @@ func waitScanProgress(ch <-chan domain.ScanProgress) tea.Cmd {
 		if !ok {
 			return nil
 		}
+
 		return scanProgressMsg(p)
 	}
 }
@@ -178,6 +185,7 @@ func waitRemoveProgress(ch <-chan domain.RemovalProgress) tea.Cmd {
 		if !ok {
 			return nil
 		}
+
 		return removeProgressMsg(p)
 	}
 }
@@ -192,6 +200,7 @@ func readLoadTick() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return readLoadTickMsg{} })
 }
 
+// Update handles terminal events and async worker messages.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -200,6 +209,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	case scanProgressMsg:
 		m.scanProgress = domain.ScanProgress(msg)
+
 		return m, waitScanProgress(m.scanRunner.progress)
 	case scanCompleteMsg:
 		res := domain.ScanResult(msg)
@@ -213,6 +223,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuildRows()
 	case removeProgressMsg:
 		m.removeProgress = domain.RemovalProgress(msg).Step
+
 		return m, waitRemoveProgress(m.removeRunner.progress)
 	case removeCompleteMsg:
 		res := domain.RemovalResult(msg)
@@ -220,10 +231,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if res.Err != nil {
 			m.mode = viewInfo
 			m.infoText = "Remove failed: " + res.Err.Error()
+
 			return m, nil
 		}
 		m.mode = viewInfo
 		m.infoText = "Disk removed"
+
 		return m, m.startScan()
 	case readLoadTickMsg:
 		if m.mode == viewReadLoad && m.readLoader != nil {
@@ -232,28 +245,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.readLoader = nil
 				m.mode = viewInfo
 				m.infoText = "Read load failed: " + snap.LastError.Error()
+
 				return m, nil
 			}
+
 			return m, readLoadTick()
 		}
 	}
+
 	return m, nil
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case viewTable:
-		break
 	case viewScanning, viewRemoving:
 		if msg.String() == "ctrl+c" || msg.String() == "q" {
 			return m, tea.Quit
 		}
+
 		return m, nil
 	case viewInfo:
 		if msg.String() == "enter" || msg.String() == "esc" || msg.String() == "q" {
 			m.mode = viewTable
 			m.infoText = ""
 		}
+
 		return m, nil
 	case viewConfirmRemove:
 		switch msg.String() {
@@ -262,17 +279,20 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			runner := &removeRunner{progress: make(chan domain.RemovalProgress), result: make(chan domain.RemovalResult, 1)}
 			m.removeRunner = runner
 			disk := m.selectedDisk()
+
 			return m, tea.Batch(func() tea.Msg {
 				go func() {
 					res := linux.Remover{}.Remove(context.Background(), *disk, m.cfg.ForceRemove, runner.progress)
 					runner.result <- res
 					close(runner.progress)
 				}()
+
 				return nil
 			}, waitRemoveProgress(runner.progress), waitRemoveResult(runner.result))
 		case "n", "esc":
 			m.mode = viewDetails
 		}
+
 		return m, nil
 	case viewDetails:
 		switch msg.String() {
@@ -286,11 +306,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.runDetailAction()
 		case "l":
 			m.detailAction = detailActionReadLoad
+
 			return m.runDetailAction()
 		case "x":
 			m.detailAction = detailActionRemove
+
 			return m.runDetailAction()
 		}
+
 		return m, nil
 	case viewReadLoad:
 		switch msg.String() {
@@ -301,6 +324,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.mode = viewDetails
 		}
+
 		return m, nil
 	}
 
@@ -336,6 +360,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.mode = viewScanning
 		m.scanProgress = domain.ScanProgress{}
+
 		return m, m.startScan()
 	case "enter":
 		if m.selectedDisk() != nil {
@@ -343,6 +368,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = viewDetails
 		}
 	}
+
 	return m, nil
 }
 
@@ -350,35 +376,42 @@ func (m *Model) runDetailAction() (tea.Model, tea.Cmd) {
 	disk := m.selectedDisk()
 	if disk == nil {
 		m.mode = viewTable
+
 		return m, nil
 	}
 
 	switch m.detailAction {
 	case detailActionClose:
 		m.mode = viewTable
+
 		return m, nil
 	case detailActionReadLoad:
 		if !disk.Caps.CanReadLoad {
 			m.mode = viewInfo
 			m.infoText = "Read load is unavailable in read-only mode"
+
 			return m, nil
 		}
 		loader, err := linux.StartReadLoad(disk.DevicePath, disk.SizeBytes)
 		if err != nil {
 			m.mode = viewInfo
 			m.infoText = "Read load failed: " + err.Error()
+
 			return m, nil
 		}
 		m.readLoader = loader
 		m.mode = viewReadLoad
+
 		return m, readLoadTick()
 	case detailActionRemove:
 		if m.readOnly || !disk.Caps.CanRemove {
 			m.mode = viewInfo
 			m.infoText = "Remove is unavailable in read-only mode"
+
 			return m, nil
 		}
 		m.mode = viewConfirmRemove
+
 		return m, nil
 	default:
 		return m, nil
@@ -392,6 +425,7 @@ func (m *Model) selectedDisk() *domain.Disk {
 	if !m.rows[m.selected].HasDisk {
 		return nil
 	}
+
 	return &m.rows[m.selected].Disk
 }
 
@@ -409,6 +443,7 @@ func (m *Model) rebuildRows() {
 			m.rows = append(m.rows, row{Disk: disks[i], HasDisk: true})
 		}
 		m.restoreSelection(selectedID)
+
 		return
 	}
 
@@ -436,12 +471,14 @@ func (m *Model) restoreSelection(selectedID string) {
 	for idx, row := range m.rows {
 		if row.HasDisk && row.Disk.ID == selectedID {
 			m.selected = idx
+
 			return
 		}
 	}
 	for idx, row := range m.rows {
 		if row.HasDisk {
 			m.selected = idx
+
 			return
 		}
 	}
@@ -466,8 +503,8 @@ func sortDisks(disks []domain.Disk, mode domain.SortMode) {
 		case domain.SortBySerial:
 			return sortString(a.Serial, b.Serial, a.DevicePath, b.DevicePath)
 		case domain.SortByHours:
-			ah := uint64(^uint64(0))
-			bh := uint64(^uint64(0))
+			ah := ^uint64(0)
+			bh := ^uint64(0)
 			if a.Smart.PowerOnHours != nil {
 				ah = *a.Smart.PowerOnHours
 			}
@@ -477,6 +514,7 @@ func sortDisks(disks []domain.Disk, mode domain.SortMode) {
 			if ah == bh {
 				return a.DevicePath < b.DevicePath
 			}
+
 			return ah < bh
 		default:
 			if a.SizeBytes == b.SizeBytes {
@@ -488,6 +526,7 @@ func sortDisks(disks []domain.Disk, mode domain.SortMode) {
 			if b.SizeBytes == 0 {
 				return true
 			}
+
 			return a.SizeBytes < b.SizeBytes
 		}
 	})
@@ -505,6 +544,7 @@ func sortString(a, b, afallback, bfallback string) bool {
 	if av == bv {
 		return afallback < bfallback
 	}
+
 	return av < bv
 }
 
@@ -512,5 +552,6 @@ func fallback(v string) string {
 	if strings.TrimSpace(v) == "" || v == "—" {
 		return "—"
 	}
+
 	return v
 }

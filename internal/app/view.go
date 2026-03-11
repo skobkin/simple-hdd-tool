@@ -11,6 +11,7 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/format"
 )
 
+// View renders the current Bubble Tea screen.
 func (m *Model) View() string {
 	switch m.mode {
 	case viewScanning:
@@ -44,6 +45,7 @@ func (m *Model) renderScan() string {
 		lines = append(lines, m.scanProgress.Text)
 	}
 	lines = append(lines, "", "q Quit  Ctrl+C Quit")
+
 	return strings.Join(lines, "\n")
 }
 
@@ -58,7 +60,7 @@ func (m *Model) renderTable() string {
 	lines = append(lines, "")
 	lines = append(lines, m.renderColumns())
 	for idx, row := range m.rows {
-		text := row.Header
+		var text string
 		if row.HasDisk {
 			text = m.renderDiskRow(row.Disk)
 		} else {
@@ -72,6 +74,7 @@ func (m *Model) renderTable() string {
 	if len(m.rows) == 0 {
 		lines = append(lines, "No supported SATA/SAS /dev/sdX disks found.")
 	}
+
 	return strings.Join(lines, "\n")
 }
 
@@ -147,6 +150,7 @@ func (m *Model) renderDetails() string {
 	}
 
 	lines = append(lines, "", m.renderDetailActions(disk), "Left/Right or Tab select  Enter activate  Esc back")
+
 	return m.styles.box.Render(strings.Join(lines, "\n"))
 }
 
@@ -162,6 +166,7 @@ func (m *Model) renderReadLoad() string {
 		lines = append(lines, "Note: "+snap.DirectIOMessage)
 	}
 	lines = append(lines, "s Stop  Esc Stop  q Stop")
+
 	return m.wrapModal("Read Load", lines)
 }
 
@@ -175,6 +180,7 @@ func (m *Model) renderDetailActions(disk *domain.Disk) string {
 		m.renderDetailButton(detailActionReadLoad, "Read load", disk.Caps.CanReadLoad, false),
 		m.renderDetailButton(detailActionRemove, "Remove", !m.readOnly && disk.Caps.CanRemove, m.cfg.ForceRemove),
 	}
+
 	return lipgloss.JoinHorizontal(lipgloss.Top, actions...)
 }
 
@@ -193,6 +199,7 @@ func (m *Model) renderDetailButton(action detailAction, label string, enabled bo
 	if m.detailAction == action {
 		style = m.styles.focused
 	}
+
 	return style.Render(label)
 }
 
@@ -207,6 +214,7 @@ func progressBar(current, total, width int) string {
 		current = total
 	}
 	filled := width * current / total
+
 	return "[" + strings.Repeat("=", filled) + strings.Repeat(" ", width-filled) + fmt.Sprintf("] %d/%d", current, total)
 }
 
@@ -229,6 +237,7 @@ func trunc(v string, width int) string {
 		b.WriteRune(r)
 		currentWidth += rw
 	}
+
 	return b.String()
 }
 
@@ -236,5 +245,6 @@ func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}
+
 	return b
 }

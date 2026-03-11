@@ -14,6 +14,7 @@ func main() {
 	cfg, err := app.ParseConfig(os.Args[1:])
 	if err != nil {
 		exitWithMessage(2, os.Stderr, err.Error())
+
 		return
 	}
 
@@ -21,6 +22,7 @@ func main() {
 		if _, err := fmt.Print(app.HelpText()); err != nil {
 			exitWithMessage(1, os.Stderr, err.Error())
 		}
+
 		return
 	}
 
@@ -28,6 +30,7 @@ func main() {
 		if _, err := fmt.Println(app.Version); err != nil {
 			exitWithMessage(1, os.Stderr, err.Error())
 		}
+
 		return
 	}
 

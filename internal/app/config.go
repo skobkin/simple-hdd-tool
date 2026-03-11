@@ -9,8 +9,10 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
 
+// Version is the application version string.
 const Version = "0.1.0"
 
+// Config holds CLI options that control grouping, sorting, and actions.
 type Config struct {
 	GroupBy     domain.GroupMode
 	SortBy      domain.SortMode
@@ -20,6 +22,7 @@ type Config struct {
 	ShowVersion bool
 }
 
+// ParseConfig parses command-line arguments into the application config.
 func ParseConfig(args []string) (Config, error) {
 	cfg := Config{
 		GroupBy: domain.GroupByModel,
@@ -59,9 +62,11 @@ func ParseConfig(args []string) (Config, error) {
 	if len(fs.Args()) > 0 {
 		return cfg, errors.New("unexpected positional arguments")
 	}
+
 	return cfg, nil
 }
 
+// HelpText returns the CLI usage text.
 func HelpText() string {
 	return `simple-hdd-tool
 

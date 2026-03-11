@@ -13,6 +13,7 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
 
+// ReadLoader drives a sustained read workload against a disk.
 type ReadLoader struct {
 	devicePath string
 	sizeBytes  uint64
@@ -28,6 +29,7 @@ type ReadLoader struct {
 	stopped bool
 }
 
+// StartReadLoad starts a background reader for the given block device.
 func StartReadLoad(devicePath string, sizeBytes uint64) (*ReadLoader, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	loader := &ReadLoader{
@@ -38,8 +40,10 @@ func StartReadLoad(devicePath string, sizeBytes uint64) (*ReadLoader, error) {
 	}
 	if err := loader.start(ctx); err != nil {
 		cancel()
+
 		return nil, err
 	}
+
 	return loader, nil
 }
 
@@ -59,6 +63,7 @@ func (r *ReadLoader) start(ctx context.Context) error {
 	}
 
 	go r.run(ctx, fd)
+
 	return nil
 }
 
@@ -77,6 +82,7 @@ func (r *ReadLoader) run(ctx context.Context, fd int) {
 			r.mu.Lock()
 			r.stopped = true
 			r.mu.Unlock()
+
 			return
 		default:
 		}
@@ -85,35 +91,48 @@ func (r *ReadLoader) run(ctx context.Context, fd int) {
 		if err != nil {
 			if errors.Is(err, syscall.EINVAL) && r.directIO {
 				r.fail(errors.New("direct I/O read failed"))
+
 				return
 			}
 			r.fail(err)
+
 			return
 		}
 		if n == 0 {
 			offset = 0
+
 			continue
 		}
+		if n < 0 {
+			r.fail(errors.New("pread returned a negative byte count"))
+
+			return
+		}
+
+		readBytes := uint64(n)
 		offset += int64(n)
-		if r.sizeBytes > 0 && uint64(offset) >= r.sizeBytes {
+		if r.sizeBytes > 0 && offset >= 0 && uint64(offset) >= r.sizeBytes {
 			offset = 0
 		}
 		r.mu.Lock()
-		r.bytes += uint64(n)
+		r.bytes += readBytes
 		r.mu.Unlock()
 		if !r.directIO {
 			if err := unix.Fadvise(fd, offset-int64(n), int64(n), unix.FADV_DONTNEED); err != nil && !errors.Is(err, syscall.ENOSYS) && !errors.Is(err, syscall.EINVAL) {
 				r.fail(err)
+
 				return
 			}
 		}
 	}
 }
 
+// Stop cancels the active read-load worker.
 func (r *ReadLoader) Stop() {
 	r.cancel()
 }
 
+// Snapshot returns the current read-load statistics.
 func (r *ReadLoader) Snapshot() domain.ReadLoadSnapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -122,6 +141,7 @@ func (r *ReadLoader) Snapshot() domain.ReadLoadSnapshot {
 	if elapsed > 0 {
 		speed = float64(r.bytes) / elapsed.Seconds()
 	}
+
 	return domain.ReadLoadSnapshot{
 		DevicePath:      r.devicePath,
 		DirectIO:        r.directIO,
@@ -136,8 +156,9 @@ func (r *ReadLoader) Snapshot() domain.ReadLoadSnapshot {
 func align4096(buf []byte) []byte {
 	const block = 4096
 	base := uintptr(block - 1)
-	ptr := uintptr(unsafe.Pointer(&buf[0]))
+	ptr := uintptr(unsafe.Pointer(&buf[0])) // #nosec G103 -- required to provide aligned buffers for O_DIRECT
 	offset := int((base - (ptr-1)%block) % block)
+
 	return buf[offset : offset+1024*1024]
 }
 

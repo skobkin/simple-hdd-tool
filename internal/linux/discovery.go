@@ -17,6 +17,7 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
 
+// Scanner discovers disks and collects SMART and usage metadata for them.
 type Scanner struct {
 	PerDiskTimeout time.Duration
 }
@@ -32,6 +33,7 @@ const (
 	ataAttrUncorrectable      = 198
 )
 
+// Scan discovers disks and streams progress while collecting metadata.
 func (s Scanner) Scan(ctx context.Context, progress chan<- domain.ScanProgress) domain.ScanResult {
 	names, err := discoverBlockDevices()
 	if err != nil {
@@ -63,6 +65,7 @@ func (s Scanner) Scan(ctx context.Context, progress chan<- domain.ScanProgress) 
 	}
 
 	sort.Slice(disks, func(i, j int) bool { return disks[i].DevicePath < disks[j].DevicePath })
+
 	return domain.ScanResult{Disks: disks, ReadOnly: readOnly}
 }
 
@@ -84,6 +87,7 @@ func discoverBlockDevices() ([]string, error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
+
 	return names, nil
 }
 
@@ -152,6 +156,7 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 	}
 
 	disk.Health, disk.Problem, disk.ProblemDetails, disk.ProblemNote = classifyProblem(disk)
+
 	return disk
 }
 
@@ -179,6 +184,7 @@ func inspectHolders(name string) (holderState, bool) {
 	if err == nil && len(slaves) > 0 {
 		out.RAIDMember = true
 	}
+
 	return out, false
 }
 
@@ -210,6 +216,7 @@ func detectTransport(name string) string {
 			return "sas"
 		}
 	}
+
 	return "scsi"
 }
 
@@ -224,20 +231,24 @@ func scanSmartctlFamily(ctx context.Context, devicePath string, timeout time.Dur
 	if _, err := exec.LookPath("smartctl"); err != nil {
 		return "", nil
 	}
+	if !isTrustedDevicePath(devicePath) {
+		return "", errors.New("untrusted device path")
+	}
 
 	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "smartctl", "-i", devicePath)
+	cmd := exec.CommandContext(cmdCtx, "smartctl", "-i", devicePath) // #nosec G204 -- devicePath is restricted to discovered /dev/sdX block devices
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		switch {
+		case errors.As(err, &exitErr):
 			// smartctl returns bitmask exit codes for health and capability states.
 			// The information section may still be valid, so keep parsing output.
-		} else if cmdCtx.Err() != nil {
+		case cmdCtx.Err() != nil:
 			return "", cmdCtx.Err()
-		} else {
+		default:
 			return "", err
 		}
 	}
@@ -255,6 +266,7 @@ func parseSmartctlFamily(output []byte) string {
 			continue
 		}
 		family := strings.Join(strings.Fields(value), " ")
+
 		return family
 	}
 
@@ -373,7 +385,7 @@ func fillAtaSMART(info *domain.SmartInfo, page *smart.AtaSmartPage) {
 			info.PowerCycleCount = &v
 		case ataAttrTemperature, ataAttrTemperatureAirflow:
 			temp, _, _, _, err := attr.ParseAsTemperature()
-			if err == nil {
+			if err == nil && temp >= 0 {
 				v := uint64(temp)
 				info.TemperatureC = &v
 			}
@@ -413,6 +425,7 @@ func classifyProblem(d domain.Disk) (domain.Health, string, string, string) {
 	if d.Smart.Available {
 		return domain.HealthHealthy, "—", "", ""
 	}
+
 	return domain.HealthUnknown, "unknown", "", ""
 }
 
@@ -438,6 +451,7 @@ func usageProblemDetails(usage domain.UsageFlags) string {
 	if usage.DMHolder {
 		parts = append(parts, "device-mapper holder present")
 	}
+
 	return strings.Join(parts, "; ")
 }
 
@@ -455,29 +469,59 @@ func smartProblemDetails(info domain.SmartInfo) string {
 	if info.ErrorCount != nil && *info.ErrorCount > 0 {
 		parts = append(parts, "SMART error log count="+strconv.FormatUint(*info.ErrorCount, 10))
 	}
+
 	return strings.Join(parts, "; ")
 }
 
 func readText(path string) string {
-	b, err := os.ReadFile(path)
+	if !isTrustedFSPath(path) {
+		return ""
+	}
+
+	b, err := os.ReadFile(path) // #nosec G304 -- path is restricted to trusted procfs/sysfs roots
 	if err != nil {
 		return ""
 	}
+
 	return string(b)
 }
 
 func isWritable(path string) bool {
-	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if !isTrustedFSPath(path) {
+		return false
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY, 0) // #nosec G304 -- path is restricted to trusted procfs/sysfs roots
 	if err != nil {
 		return false
 	}
 	_ = f.Close()
+
 	return true
+}
+
+func isTrustedFSPath(path string) bool {
+	cleanPath := filepath.Clean(path)
+	if !filepath.IsAbs(cleanPath) {
+		return false
+	}
+
+	return strings.HasPrefix(cleanPath, "/sys/") || strings.HasPrefix(cleanPath, "/proc/")
+}
+
+func isTrustedDevicePath(path string) bool {
+	cleanPath := filepath.Clean(path)
+	if !filepath.IsAbs(cleanPath) {
+		return false
+	}
+
+	return strings.HasPrefix(cleanPath, "/dev/sd")
 }
 
 func dashIfEmpty(v string) string {
 	if strings.TrimSpace(v) == "" {
 		return "—"
 	}
+
 	return v
 }

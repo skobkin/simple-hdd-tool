@@ -7,12 +7,14 @@ import (
 	"strings"
 )
 
+// UsageInfo describes whether a disk is currently in active use.
 type UsageInfo struct {
 	Mounted    bool
 	Swap       bool
 	ChecksPart bool
 }
 
+// CollectUsageInfo inspects mounted filesystems and swap devices for the given disks.
 func CollectUsageInfo(baseDevices map[string]struct{}) map[string]UsageInfo {
 	out := make(map[string]UsageInfo, len(baseDevices))
 	for dev := range baseDevices {
@@ -46,6 +48,7 @@ func baseBlockDevice(device string) string {
 			return r >= '0' && r <= '9'
 		})
 	}
+
 	return ""
 }
 
@@ -70,6 +73,7 @@ func collectMountedUsage(out map[string]UsageInfo) (err error) {
 		for i, f := range fields {
 			if f == "-" {
 				sep = i
+
 				break
 			}
 		}
@@ -104,6 +108,7 @@ func collectSwapUsage(out map[string]UsageInfo) (err error) {
 	for s.Scan() {
 		if first {
 			first = false
+
 			continue
 		}
 		fields := strings.Fields(s.Text())
@@ -112,6 +117,7 @@ func collectSwapUsage(out map[string]UsageInfo) (err error) {
 		}
 		base := baseBlockDevice(fields[0])
 		if base == "" {
+
 			continue
 		}
 		info := out[base]

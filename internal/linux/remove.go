@@ -10,8 +10,10 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
 
+// Remover removes a disk from the kernel after safety checks.
 type Remover struct{}
 
+// Remove requests kernel-side device removal and waits for the device nodes to disappear.
 func (Remover) Remove(ctx context.Context, disk domain.Disk, force bool, progress chan<- domain.RemovalProgress) domain.RemovalResult {
 	progress <- domain.RemovalProgress{Step: "Checking mount status"}
 	if !force {
