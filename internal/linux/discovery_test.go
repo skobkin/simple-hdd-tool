@@ -54,28 +54,107 @@ Device Model:     ST8000AS0002-1NA17Z
 	}
 }
 
-func TestClassifyProblemIncludesSmartCounterDetails(t *testing.T) {
+func TestParseSmartctlHealth(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		output string
+		want   domain.SmartctlHealth
+	}{
+		{
+			name: "passed",
+			output: `smartctl 7.5
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+`,
+			want: domain.SmartctlHealthPassed,
+		},
+		{
+			name: "failed",
+			output: `smartctl 7.5
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: FAILED
+`,
+			want: domain.SmartctlHealthFailed,
+		},
+		{
+			name: "missing line",
+			output: `smartctl 7.5
+
+=== START OF READ SMART DATA SECTION ===
+SMART Attributes Data Structure revision number: 10
+`,
+			want: domain.SmartctlHealthUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := parseSmartctlHealth([]byte(tt.output))
+			if got != tt.want {
+				t.Fatalf("parseSmartctlHealth() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClassifyProblemDoesNotWarnOnSmartErrorLogAlone(t *testing.T) {
 	t.Parallel()
 
 	errorCount := uint64(1)
 
 	health, problem, details, note := classifyProblem(domain.Disk{
 		Smart: domain.SmartInfo{
+			Available:  true,
 			ErrorCount: &errorCount,
 		},
 	})
 
-	if health != domain.HealthWarning {
-		t.Fatalf("health = %q, want %q", health, domain.HealthWarning)
+	if health != domain.HealthHealthy {
+		t.Fatalf("health = %q, want %q", health, domain.HealthHealthy)
 	}
-	if problem != "health warning" {
-		t.Fatalf("problem = %q, want %q", problem, "health warning")
+	if problem != "—" {
+		t.Fatalf("problem = %q, want %q", problem, "—")
 	}
 	if details != "SMART error log count=1" {
 		t.Fatalf("details = %q", details)
 	}
-	if note != "SMART counters indicate potential media issues" {
+	if note != "SMART error log contains historical entries" {
 		t.Fatalf("note = %q", note)
+	}
+}
+
+func TestClassifyProblemExplainsSmartctlDisagreement(t *testing.T) {
+	t.Parallel()
+
+	pending := uint64(2)
+
+	health, problem, details, note := classifyProblem(domain.Disk{
+		Smart: domain.SmartInfo{
+			Available:      true,
+			OverallHealth:  domain.SmartctlHealthPassed,
+			PendingSectors: &pending,
+		},
+	})
+
+	if health != domain.HealthFailing {
+		t.Fatalf("health = %q, want %q", health, domain.HealthFailing)
+	}
+	if problem != "disk failure" {
+		t.Fatalf("problem = %q, want %q", problem, "disk failure")
+	}
+	if details != "pending sectors=2" {
+		t.Fatalf("details = %q", details)
+	}
+	wantNote := "critical SMART counters are non-zero; app diagnosis is stricter than smartctl overall-health"
+	if note != wantNote {
+		t.Fatalf("note = %q, want %q", note, wantNote)
 	}
 }
 

@@ -80,19 +80,20 @@ func (m *Model) renderTable() string {
 }
 
 func (m *Model) renderColumns() string {
-	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %s",
-		"size", "model", "family", "serial", "dev", "time", "problems")
+	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %-6s %s",
+		"size", "model", "family", "serial", "dev", "time", "health", "problems")
 }
 
 func (m *Model) renderDiskRow(d domain.Disk) string {
-	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %s",
+	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %-6s %s",
 		trunc(format.SizeBytes(d.SizeBytes), 9),
 		trunc(d.Model, 18),
 		trunc(d.Family, 10),
 		trunc(d.Serial, 14),
 		trunc(d.DevicePath, 10),
 		format.DurationHoursCompact(d.Smart.PowerOnHours, 13),
-		trunc(d.Problem, maxInt(8, m.width-80)),
+		smartctlHealthIndicator(m.styles, d.Smart.OverallHealth),
+		trunc(d.Problem, maxInt(8, m.width-87)),
 	)
 }
 
@@ -127,7 +128,8 @@ func (m *Model) renderDetails() string {
 			Title: "Health",
 			Lines: []string{
 				"Time: " + format.DurationHours(disk.Smart.PowerOnHours),
-				"Health: " + health,
+				"smartctl health: " + renderSmartctlHealthText(m.styles, disk.Smart.OverallHealth),
+				"App diagnosis: " + health,
 				"Problem: " + fallback(disk.Problem),
 			},
 		},
@@ -155,6 +157,9 @@ func (m *Model) renderDetails() string {
 	}
 	if disk.ProblemNote != "" {
 		sections[1].Lines = append(sections[1].Lines, "Note: "+disk.ProblemNote)
+	}
+	if disk.Smart.OverallHealthNote != "" {
+		sections[1].Lines = append(sections[1].Lines, "smartctl note: "+disk.Smart.OverallHealthNote)
 	}
 	if disk.Usage.ChecksPartial {
 		sections[3].Lines = append(sections[3].Lines, "Warning: Could not fully verify device usage; proceed carefully")
@@ -214,6 +219,28 @@ func metricLine(label string, value *uint64, suffix string) string {
 	}
 
 	return fmt.Sprintf("%s: %d%s", label, *value, suffix)
+}
+
+func smartctlHealthIndicator(styles styles, health domain.SmartctlHealth) string {
+	switch health {
+	case domain.SmartctlHealthPassed:
+		return styles.good.Render("●")
+	case domain.SmartctlHealthFailed:
+		return styles.bad.Render("✕")
+	default:
+		return styles.faint.Render("?")
+	}
+}
+
+func renderSmartctlHealthText(styles styles, health domain.SmartctlHealth) string {
+	switch health {
+	case domain.SmartctlHealthPassed:
+		return styles.good.Render(string(health))
+	case domain.SmartctlHealthFailed:
+		return styles.bad.Render(string(health))
+	default:
+		return styles.faint.Render(string(domain.SmartctlHealthUnknown))
+	}
 }
 
 func (m *Model) renderReadLoad() string {

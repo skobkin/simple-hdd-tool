@@ -19,6 +19,9 @@ func TestRenderDiskRowStaysSingleLine(t *testing.T) {
 		DevicePath: "/dev/sdb",
 		Problem:    "health warning",
 		SizeBytes:  8001563222016,
+		Smart: domain.SmartInfo{
+			OverallHealth: domain.SmartctlHealthPassed,
+		},
 	})
 
 	if strings.Contains(row, "\n") {
@@ -60,12 +63,15 @@ func TestRenderDetailsShowsProblemDetails(t *testing.T) {
 		Health:         domain.HealthWarning,
 		Problem:        "health warning",
 		ProblemDetails: "pending sectors=2; SMART error log count=1",
+		Smart: domain.SmartInfo{
+			OverallHealth: domain.SmartctlHealthPassed,
+		},
 	}}
 	m.rebuildRows()
 
 	out := m.renderDetails()
 
-	assertSubstringsInOrder(t, out, "Identity", "Health", "Problem details: pending sectors=2; SMART error log count=1")
+	assertSubstringsInOrder(t, out, "Identity", "Health", "smartctl health: passed", "App diagnosis: warning", "Problem details: pending sectors=2; SMART error log count=1")
 	if !strings.Contains(out, "Problem details: pending sectors=2; SMART error log count=1") {
 		t.Fatalf("renderDetails() did not include problem details:\n%s", out)
 	}
@@ -85,19 +91,49 @@ func TestRenderDetailsShowsRemovalObstacleSeparately(t *testing.T) {
 		Problem:         "—",
 		RemovalObstacle: "mounted; swap active",
 		Smart: domain.SmartInfo{
-			TemperatureC: &temp,
+			TemperatureC:  &temp,
+			OverallHealth: domain.SmartctlHealthPassed,
 		},
 	}}
 	m.rebuildRows()
 
 	out := m.renderDetails()
 
-	assertSubstringsInOrder(t, out, "Health", "Problem: —", "SMART", "Temperature: 31 C", "Removal / Usage", "Removal obstacle: mounted; swap active")
+	assertSubstringsInOrder(t, out, "Health", "smartctl health: passed", "App diagnosis: healthy", "Problem: —", "SMART", "Temperature: 31 C", "Removal / Usage", "Removal obstacle: mounted; swap active")
 	if !strings.Contains(out, "Removal obstacle: mounted; swap active") {
 		t.Fatalf("renderDetails() did not include removal obstacle:\n%s", out)
 	}
 	if strings.Contains(out, "Problem: mounted") {
 		t.Fatalf("renderDetails() rendered removal obstacle as problem:\n%s", out)
+	}
+}
+
+func TestRenderColumnsIncludesHealthBeforeProblems(t *testing.T) {
+	m := NewModel(Config{})
+
+	columns := m.renderColumns()
+
+	assertSubstringsInOrder(t, columns, "time", "health", "problems")
+}
+
+func TestRenderDiskRowShowsSmartctlHealthIndicator(t *testing.T) {
+	m := NewModel(Config{})
+	m.width = 120
+
+	row := m.renderDiskRow(domain.Disk{
+		Model:      "Model",
+		Family:     "Family",
+		Serial:     "Serial",
+		DevicePath: "/dev/sdb",
+		Problem:    "healthy",
+		SizeBytes:  8001563222016,
+		Smart: domain.SmartInfo{
+			OverallHealth: domain.SmartctlHealthPassed,
+		},
+	})
+
+	if !strings.Contains(row, "●") {
+		t.Fatalf("renderDiskRow() did not include smartctl health indicator:\n%s", row)
 	}
 }
 

@@ -68,6 +68,18 @@ const (
 	HealthUnknown Health = "unknown"
 )
 
+// SmartctlHealth summarizes smartctl overall SMART self-assessment status.
+type SmartctlHealth string
+
+const (
+	// SmartctlHealthPassed means smartctl reported an overall SMART pass.
+	SmartctlHealthPassed SmartctlHealth = "passed"
+	// SmartctlHealthFailed means smartctl reported an overall SMART failure.
+	SmartctlHealthFailed SmartctlHealth = "failed"
+	// SmartctlHealthUnknown means smartctl did not provide a usable overall SMART status.
+	SmartctlHealthUnknown SmartctlHealth = "unknown"
+)
+
 // Capabilities describes operations supported for a disk in the current environment.
 type Capabilities struct {
 	CanReadSMART bool
@@ -88,6 +100,8 @@ type UsageFlags struct {
 type SmartInfo struct {
 	Available           bool
 	ReadError           string
+	OverallHealth       SmartctlHealth
+	OverallHealthNote   string
 	PowerOnHours        *uint64
 	TemperatureC        *uint64
 	ReallocatedSectors  *uint64

@@ -9,11 +9,11 @@ Interactive terminal UI for inspecting Linux SATA/SAS disks, checking SMART-deri
 2 disks found
 g Group:model  s Sort:size  r Refresh  Enter Details  q Quit  Ctrl+C Quit
 
-size      model              family     serial         block dev  time         problems
+size      model              family     serial         block dev  time         health problems
 HGST HUS728T8TALE6L4 (1)
-8.0 TB    HGST HUS728T8TALE6 HGST Ultra XXXXXXXX       /dev/sdb   4y 5m 15d 15 mounted
+8.0 TB    HGST HUS728T8TALE6 HGST Ultra XXXXXXXX       /dev/sdb   4y 5m 15d 15 ●      mounted
 ST8000AS0002-1NA17Z (1)
-8.0 TB    ST8000AS0002-1NA17 Seagate Ar YYYYYYYY       /dev/sda   4y 11m 6d 14 health warning
+8.0 TB    ST8000AS0002-1NA17 Seagate Ar YYYYYYYY       /dev/sda   4y 11m 6d 14 ●      health warning
 ```
 
 ### Disk details
@@ -26,17 +26,24 @@ ST8000AS0002-1NA17Z (1)
 │ Size: 8.0 TB                                         │
 │ Serial: YYYYYYYY                                     │
 │ Block device: /dev/sda                               │
+│                                                      │
+│ Health                                               │
 │ Time: 4y 11m 6d 14h                                  │
-│ Health: warning                                      │
+│ smartctl health: passed                              │
+│ App diagnosis: warning                               │
 │ Problem: health warning                              │
-│ Problem details: SMART error log count=68            │
+│ Problem details: pending sectors=2                   │
+│ Note: SMART counters indicate potential media issues │
+│ Note: app diagnosis is stricter than smartctl overal │
+│ l-health                                             │
+│                                                      │
+│ SMART                                                │
 │ Temperature: 29 C                                    │
 │ Reallocated sectors: 0                               │
-│ Pending sectors: 0                                   │
+│ Pending sectors: 2                                   │
 │ Reported uncorrectable errors: 0                     │
 │ Start/stop count: 12798                              │
 │ Power cycle count: 3380                              │
-│ Note: SMART counters indicate potential media issues │
 │                                                      │
 │  Close  Read load  Remove                            │
 │ Left/Right or Tab select  Enter activate  Esc back   │
@@ -62,6 +69,7 @@ ST8000AS0002-1NA17Z (1)
 - Linux TUI built with Bubble Tea.
 - Scans `/sys/block` for supported `/dev/sdX` disks and skips USB/unsupported transports.
 - Reads disk identity, capacity, uptime, temperature, and selected SMART counters.
+- Shows `smartctl` overall SMART pass/fail separately from the app's own diagnosis.
 - Classifies disks as `healthy`, `warning`, `failing`, or `unknown`.
 - Highlights risky states such as mounted disks, active swap, mdraid holders, and device-mapper holders.
 - Groups the disk list by model, size, family, or not at all.
@@ -77,7 +85,7 @@ ST8000AS0002-1NA17Z (1)
 - Linux only.
 - The scan targets `/dev/sdX` block devices. NVMe, loop, and USB disks are not part of the current scope.
 - Running as root is required for full functionality. Without it, read-load and remove actions are unavailable.
-- `smartctl` is optional, but when present it is used to improve disk family detection.
+- `smartctl` is optional, but when present it is used to improve disk family detection and to show overall SMART pass/fail status.
 
 ## Build
 

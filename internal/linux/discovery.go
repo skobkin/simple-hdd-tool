@@ -154,6 +154,12 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 	} else if err != nil {
 		disk.Warnings = append(disk.Warnings, "smartctl info read failed: "+err.Error())
 	}
+	if overallHealth, err := scanSmartctlHealth(ctx, devicePath, timeout); err == nil {
+		disk.Smart.OverallHealth = overallHealth
+	} else {
+		disk.Smart.OverallHealthNote = err.Error()
+		disk.Warnings = append(disk.Warnings, "smartctl health read failed: "+err.Error())
+	}
 
 	disk.Health, disk.Problem, disk.ProblemDetails, disk.ProblemNote = classifyProblem(disk)
 	disk.RemovalObstacle = removalObstacleDetails(disk.Usage)
@@ -228,18 +234,41 @@ type identity struct {
 	SizeBytes uint64
 }
 
+type smartctlInfo struct {
+	Family        string
+	OverallHealth domain.SmartctlHealth
+}
+
 func scanSmartctlFamily(ctx context.Context, devicePath string, timeout time.Duration) (string, error) {
+	info, err := scanSmartctlInfo(ctx, devicePath, timeout, "-i")
+	if err != nil {
+		return "", err
+	}
+
+	return info.Family, nil
+}
+
+func scanSmartctlHealth(ctx context.Context, devicePath string, timeout time.Duration) (domain.SmartctlHealth, error) {
+	info, err := scanSmartctlInfo(ctx, devicePath, timeout, "-H")
+	if err != nil {
+		return domain.SmartctlHealthUnknown, err
+	}
+
+	return info.OverallHealth, nil
+}
+
+func scanSmartctlInfo(ctx context.Context, devicePath string, timeout time.Duration, mode string) (smartctlInfo, error) {
 	if _, err := exec.LookPath("smartctl"); err != nil {
-		return "", nil
+		return smartctlInfo{}, nil
 	}
 	if !isTrustedDevicePath(devicePath) {
-		return "", errors.New("untrusted device path")
+		return smartctlInfo{}, errors.New("untrusted device path")
 	}
 
 	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "smartctl", "-i", devicePath) // #nosec G204 -- devicePath is restricted to discovered /dev/sdX block devices
+	cmd := exec.CommandContext(cmdCtx, "smartctl", mode, devicePath) // #nosec G204 -- devicePath is restricted to discovered /dev/sdX block devices
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -248,13 +277,16 @@ func scanSmartctlFamily(ctx context.Context, devicePath string, timeout time.Dur
 			// smartctl returns bitmask exit codes for health and capability states.
 			// The information section may still be valid, so keep parsing output.
 		case cmdCtx.Err() != nil:
-			return "", cmdCtx.Err()
+			return smartctlInfo{}, cmdCtx.Err()
 		default:
-			return "", err
+			return smartctlInfo{}, err
 		}
 	}
 
-	return parseSmartctlFamily(output), nil
+	return smartctlInfo{
+		Family:        parseSmartctlFamily(output),
+		OverallHealth: parseSmartctlHealth(output),
+	}, nil
 }
 
 func parseSmartctlFamily(output []byte) string {
@@ -272,6 +304,25 @@ func parseSmartctlFamily(output []byte) string {
 	}
 
 	return ""
+}
+
+func parseSmartctlHealth(output []byte) domain.SmartctlHealth {
+	for _, line := range strings.Split(string(output), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.Contains(trimmed, "SMART overall-health self-assessment test result:") {
+			continue
+		}
+		switch {
+		case strings.HasSuffix(trimmed, "PASSED"):
+			return domain.SmartctlHealthPassed
+		case strings.HasSuffix(trimmed, "FAILED"):
+			return domain.SmartctlHealthFailed
+		default:
+			return domain.SmartctlHealthUnknown
+		}
+	}
+
+	return domain.SmartctlHealthUnknown
 }
 
 func scanSMART(ctx context.Context, devicePath string, timeout time.Duration) (domain.SmartInfo, identity, error) {
@@ -307,7 +358,7 @@ func scanSMARTSync(devicePath string) (info domain.SmartInfo, id identity, err e
 		}
 	}()
 
-	info = domain.SmartInfo{Available: true}
+	info = domain.SmartInfo{Available: true, OverallHealth: domain.SmartctlHealthUnknown}
 	id = identity{}
 	switch d := dev.(type) {
 	case *smart.SataDevice:
@@ -409,16 +460,16 @@ func classifyProblem(d domain.Disk) (domain.Health, string, string, string) {
 	}
 
 	if severeCount(d.Smart.ReallocatedSectors) || severeCount(d.Smart.PendingSectors) || severeCount(d.Smart.UncorrectableErrors) {
-		return domain.HealthFailing, "disk failure", smartProblemDetails(d.Smart), "critical SMART counters are non-zero"
+		return domain.HealthFailing, "disk failure", smartProblemDetails(d.Smart), problemNote(d.Smart, "critical SMART counters are non-zero")
 	}
-	if warnedCount(d.Smart.ReallocatedSectors) || warnedCount(d.Smart.PendingSectors) || warnedCount(d.Smart.UncorrectableErrors) || warnedCount(d.Smart.ErrorCount) {
-		return domain.HealthWarning, "health warning", smartProblemDetails(d.Smart), "SMART counters indicate potential media issues"
+	if warnedCount(d.Smart.ReallocatedSectors) || warnedCount(d.Smart.PendingSectors) || warnedCount(d.Smart.UncorrectableErrors) {
+		return domain.HealthWarning, "health warning", smartProblemDetails(d.Smart), problemNote(d.Smart, "SMART counters indicate potential media issues")
 	}
 	if d.Usage.ChecksPartial {
 		return domain.HealthWarning, "unknown", "usage verification incomplete", "could not fully verify device usage"
 	}
 	if d.Smart.Available {
-		return domain.HealthHealthy, "—", "", ""
+		return domain.HealthHealthy, "—", smartProblemDetails(d.Smart), problemNote(d.Smart, "")
 	}
 
 	return domain.HealthUnknown, "unknown", "", ""
@@ -430,6 +481,22 @@ func severeCount(v *uint64) bool {
 
 func warnedCount(v *uint64) bool {
 	return v != nil && *v > 0
+}
+
+func problemNote(info domain.SmartInfo, base string) string {
+	notes := make([]string, 0, 3)
+	if base != "" {
+		notes = append(notes, base)
+	}
+	if info.ErrorCount != nil && *info.ErrorCount > 0 {
+		notes = append(notes, "SMART error log contains historical entries")
+	}
+	if info.OverallHealth == domain.SmartctlHealthPassed &&
+		(warnedCount(info.ReallocatedSectors) || warnedCount(info.PendingSectors) || warnedCount(info.UncorrectableErrors)) {
+		notes = append(notes, "app diagnosis is stricter than smartctl overall-health")
+	}
+
+	return strings.Join(notes, "; ")
 }
 
 func usageProblemDetails(usage domain.UsageFlags) string {
