@@ -13,6 +13,15 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
 
+var (
+	unixOpen    = unix.Open
+	unixPread   = unix.Pread
+	unixFadvise = unix.Fadvise
+	unixClose   = unix.Close
+	timeSince   = time.Since
+	timeNowRL   = time.Now
+)
+
 // ReadLoader drives a sustained read workload against a disk.
 type ReadLoader struct {
 	devicePath string
@@ -35,7 +44,7 @@ func StartReadLoad(devicePath string, sizeBytes uint64) (*ReadLoader, error) {
 	loader := &ReadLoader{
 		devicePath: devicePath,
 		sizeBytes:  sizeBytes,
-		startedAt:  time.Now(),
+		startedAt:  timeNowRL(),
 		cancel:     cancel,
 	}
 	if err := loader.start(ctx); err != nil {
@@ -48,12 +57,12 @@ func StartReadLoad(devicePath string, sizeBytes uint64) (*ReadLoader, error) {
 }
 
 func (r *ReadLoader) start(ctx context.Context) error {
-	fd, err := unix.Open(r.devicePath, unix.O_RDONLY|unix.O_DIRECT|unix.O_CLOEXEC, 0)
+	fd, err := unixOpen(r.devicePath, unix.O_RDONLY|unix.O_DIRECT|unix.O_CLOEXEC, 0)
 	if err != nil {
 		if !errors.Is(err, syscall.EINVAL) && !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.EACCES) {
 			return err
 		}
-		fd, err = unix.Open(r.devicePath, unix.O_RDONLY|unix.O_CLOEXEC, 0)
+		fd, err = unixOpen(r.devicePath, unix.O_RDONLY|unix.O_CLOEXEC, 0)
 		if err != nil {
 			return err
 		}
@@ -69,7 +78,7 @@ func (r *ReadLoader) start(ctx context.Context) error {
 
 func (r *ReadLoader) run(ctx context.Context, fd int) {
 	defer func() {
-		if err := unix.Close(fd); err != nil {
+		if err := unixClose(fd); err != nil {
 			r.fail(err)
 		}
 	}()
@@ -87,7 +96,7 @@ func (r *ReadLoader) run(ctx context.Context, fd int) {
 		default:
 		}
 
-		n, err := unix.Pread(fd, aligned, offset)
+		n, err := unixPread(fd, aligned, offset)
 		if err != nil {
 			if errors.Is(err, syscall.EINVAL) && r.directIO {
 				r.fail(errors.New("direct I/O read failed"))
@@ -118,7 +127,7 @@ func (r *ReadLoader) run(ctx context.Context, fd int) {
 		r.bytes += readBytes
 		r.mu.Unlock()
 		if !r.directIO {
-			if err := unix.Fadvise(fd, offset-int64(n), int64(n), unix.FADV_DONTNEED); err != nil && !errors.Is(err, syscall.ENOSYS) && !errors.Is(err, syscall.EINVAL) {
+			if err := unixFadvise(fd, offset-int64(n), int64(n), unix.FADV_DONTNEED); err != nil && !errors.Is(err, syscall.ENOSYS) && !errors.Is(err, syscall.EINVAL) {
 				r.fail(err)
 
 				return
@@ -136,7 +145,7 @@ func (r *ReadLoader) Stop() {
 func (r *ReadLoader) Snapshot() domain.ReadLoadSnapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	elapsed := time.Since(r.startedAt)
+	elapsed := timeSince(r.startedAt)
 	speed := 0.0
 	if elapsed > 0 {
 		speed = float64(r.bytes) / elapsed.Seconds()

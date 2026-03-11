@@ -15,6 +15,8 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/linux"
 )
 
+var startReadLoad = linux.StartReadLoad
+
 type viewMode int
 
 const (
@@ -408,7 +410,7 @@ func (m *Model) runDetailAction() (tea.Model, tea.Cmd) {
 
 			return m, nil
 		}
-		loader, err := linux.StartReadLoad(disk.DevicePath, disk.SizeBytes)
+		loader, err := startReadLoad(disk.DevicePath, disk.SizeBytes)
 		if err != nil {
 			m.mode = viewInfo
 			m.infoText = "Read load failed: " + err.Error()

@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+var (
+	procMountInfoPath = "/proc/self/mountinfo"
+	procSwapsPath     = "/proc/swaps"
+	openProcFile      = os.Open
+)
+
 // UsageInfo describes whether a disk is currently in active use.
 type UsageInfo struct {
 	Mounted    bool
@@ -53,7 +59,7 @@ func baseBlockDevice(device string) string {
 }
 
 func collectMountedUsage(out map[string]UsageInfo) (err error) {
-	mounts, err := os.Open("/proc/self/mountinfo")
+	mounts, err := openProcFile(procMountInfoPath)
 	if err != nil {
 		return err
 	}
@@ -93,7 +99,7 @@ func collectMountedUsage(out map[string]UsageInfo) (err error) {
 }
 
 func collectSwapUsage(out map[string]UsageInfo) (err error) {
-	swaps, err := os.Open("/proc/swaps")
+	swaps, err := openProcFile(procSwapsPath)
 	if err != nil {
 		return err
 	}

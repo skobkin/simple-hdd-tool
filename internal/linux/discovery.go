@@ -17,6 +17,20 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
 
+var (
+	sysBlockRoot      = "/sys/block"
+	readDir           = os.ReadDir
+	readFile          = os.ReadFile
+	globPaths         = filepath.Glob
+	evalSymlinks      = filepath.EvalSymlinks
+	openFileWritable  = func(path string) (*os.File, error) { return os.OpenFile(path, os.O_WRONLY, 0) }
+	geteuid           = os.Geteuid
+	lookPath          = exec.LookPath
+	commandContext    = exec.CommandContext
+	openSmartDevice   = smart.Open
+	scanSMARTSyncFunc = scanSMARTSync
+)
+
 // Scanner discovers disks and collects SMART and usage metadata for them.
 type Scanner struct {
 	PerDiskTimeout time.Duration
@@ -46,7 +60,7 @@ func (s Scanner) Scan(ctx context.Context, progress chan<- domain.ScanProgress) 
 	usage := CollectUsageInfo(devices)
 
 	disks := make([]domain.Disk, 0, len(names))
-	readOnly := os.Geteuid() != 0
+	readOnly := geteuid() != 0
 	for idx, name := range names {
 		select {
 		case <-ctx.Done():
@@ -70,7 +84,7 @@ func (s Scanner) Scan(ctx context.Context, progress chan<- domain.ScanProgress) 
 }
 
 func discoverBlockDevices() ([]string, error) {
-	entries, err := os.ReadDir("/sys/block")
+	entries, err := readDir(sysBlockRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +94,7 @@ func discoverBlockDevices() ([]string, error) {
 		if !strings.HasPrefix(name, "sd") {
 			continue
 		}
-		deviceType := strings.TrimSpace(readText(filepath.Join("/sys/block", name, "device/type")))
+		deviceType := strings.TrimSpace(readText(filepath.Join(sysBlockRoot, name, "device/type")))
 		if deviceType != "" && deviceType != "0" {
 			continue
 		}
@@ -92,7 +106,7 @@ func discoverBlockDevices() ([]string, error) {
 }
 
 func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) domain.Disk {
-	sysfsPath := filepath.Join("/sys/block", name)
+	sysfsPath := filepath.Join(sysBlockRoot, name)
 	devicePath := "/dev/" + name
 	sizeSectors, _ := strconv.ParseUint(strings.TrimSpace(readText(filepath.Join(sysfsPath, "size"))), 10, 64)
 	sizeBytes := sizeSectors * 512
@@ -113,7 +127,7 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 			ChecksPartial: usage.ChecksPart,
 		},
 		Caps: domain.Capabilities{
-			CanReadLoad: os.Geteuid() == 0,
+			CanReadLoad: geteuid() == 0,
 			CanRemove:   isWritable(filepath.Join(sysfsPath, "device/delete")),
 		},
 		Health:  domain.HealthUnknown,
@@ -174,7 +188,7 @@ type holderState struct {
 
 func inspectHolders(name string) (holderState, bool) {
 	var out holderState
-	entries, err := os.ReadDir(filepath.Join("/sys/block", name, "holders"))
+	entries, err := readDir(filepath.Join(sysBlockRoot, name, "holders"))
 	if err != nil {
 		return out, true
 	}
@@ -187,7 +201,7 @@ func inspectHolders(name string) (holderState, bool) {
 			out.DMHolder = true
 		}
 	}
-	slaves, err := filepath.Glob(filepath.Join("/sys/block/md*", "slaves", name))
+	slaves, err := globPaths(filepath.Join(sysBlockRoot, "md*", "slaves", name))
 	if err == nil && len(slaves) > 0 {
 		out.RAIDMember = true
 	}
@@ -196,7 +210,7 @@ func inspectHolders(name string) (holderState, bool) {
 }
 
 func detectTransport(name string) string {
-	sysfsPath := filepath.Join("/sys/block", name)
+	sysfsPath := filepath.Join(sysBlockRoot, name)
 	protocol := strings.ToLower(strings.TrimSpace(readText(filepath.Join(sysfsPath, "device/protocol"))))
 	if protocol != "" {
 		switch protocol {
@@ -211,7 +225,7 @@ func detectTransport(name string) string {
 		}
 	}
 
-	resolved, err := filepath.EvalSymlinks(filepath.Join(sysfsPath, "device"))
+	resolved, err := evalSymlinks(filepath.Join(sysfsPath, "device"))
 	if err == nil {
 		if strings.Contains(resolved, "/usb") {
 			return "usb"
@@ -258,7 +272,7 @@ func scanSmartctlHealth(ctx context.Context, devicePath string, timeout time.Dur
 }
 
 func scanSmartctlInfo(ctx context.Context, devicePath string, timeout time.Duration, mode string) (smartctlInfo, error) {
-	if _, err := exec.LookPath("smartctl"); err != nil {
+	if _, err := lookPath("smartctl"); err != nil {
 		return smartctlInfo{}, nil
 	}
 	if !isTrustedDevicePath(devicePath) {
@@ -268,7 +282,7 @@ func scanSmartctlInfo(ctx context.Context, devicePath string, timeout time.Durat
 	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "smartctl", mode, devicePath) // #nosec G204 -- devicePath is restricted to discovered /dev/sdX block devices
+	cmd := commandContext(cmdCtx, "smartctl", mode, devicePath) // #nosec G204 -- devicePath is restricted to discovered /dev/sdX block devices
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -333,7 +347,7 @@ func scanSMART(ctx context.Context, devicePath string, timeout time.Duration) (d
 	}
 	done := make(chan result, 1)
 	go func() {
-		sm, id, err := scanSMARTSync(devicePath)
+		sm, id, err := scanSMARTSyncFunc(devicePath)
 		done <- result{smart: sm, id: id, err: err}
 	}()
 
@@ -348,7 +362,7 @@ func scanSMART(ctx context.Context, devicePath string, timeout time.Duration) (d
 }
 
 func scanSMARTSync(devicePath string) (info domain.SmartInfo, id identity, err error) {
-	dev, err := smart.Open(devicePath)
+	dev, err := openSmartDevice(devicePath)
 	if err != nil {
 		return domain.SmartInfo{}, identity{}, err
 	}
@@ -544,7 +558,7 @@ func readText(path string) string {
 		return ""
 	}
 
-	b, err := os.ReadFile(path) // #nosec G304 -- path is restricted to trusted procfs/sysfs roots
+	b, err := readFile(path) // #nosec G304 -- path is restricted to trusted procfs/sysfs roots
 	if err != nil {
 		return ""
 	}
@@ -557,7 +571,7 @@ func isWritable(path string) bool {
 		return false
 	}
 
-	f, err := os.OpenFile(path, os.O_WRONLY, 0) // #nosec G304 -- path is restricted to trusted procfs/sysfs roots
+	f, err := openFileWritable(path) // #nosec G304 -- path is restricted to trusted procfs/sysfs roots
 	if err != nil {
 		return false
 	}

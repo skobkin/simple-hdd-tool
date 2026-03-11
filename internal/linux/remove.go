@@ -10,6 +10,14 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
 
+var (
+	statPath     = os.Stat
+	writeFile    = os.WriteFile
+	timeNow      = time.Now
+	sleep        = time.Sleep
+	removeTimout = 5 * time.Second
+)
+
 // Remover removes a disk from the kernel after safety checks.
 type Remover struct{}
 
@@ -26,29 +34,29 @@ func (Remover) Remove(ctx context.Context, disk domain.Disk, force bool, progres
 	}
 
 	deletePath := filepath.Join(disk.SysfsPath, "device/delete")
-	if _, err := os.Stat(deletePath); err != nil {
+	if _, err := statPath(deletePath); err != nil {
 		return domain.RemovalResult{Err: errors.New("kernel delete path is unavailable")}
 	}
 
 	progress <- domain.RemovalProgress{Step: "Removing " + disk.DevicePath + " from kernel"}
-	if err := os.WriteFile(deletePath, []byte("1"), 0); err != nil {
+	if err := writeFile(deletePath, []byte("1"), 0); err != nil {
 		return domain.RemovalResult{Err: err}
 	}
 
 	progress <- domain.RemovalProgress{Step: "Verifying removal"}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	deadline := timeNow().Add(removeTimout)
+	for timeNow().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return domain.RemovalResult{Err: ctx.Err()}
 		default:
 		}
-		_, sysErr := os.Stat(disk.SysfsPath)
-		_, devErr := os.Stat(disk.DevicePath)
+		_, sysErr := statPath(disk.SysfsPath)
+		_, devErr := statPath(disk.DevicePath)
 		if os.IsNotExist(sysErr) && os.IsNotExist(devErr) {
 			return domain.RemovalResult{Success: true}
 		}
-		time.Sleep(200 * time.Millisecond)
+		sleep(200 * time.Millisecond)
 	}
 
 	return domain.RemovalResult{Err: errors.New("removal verification timed out")}
