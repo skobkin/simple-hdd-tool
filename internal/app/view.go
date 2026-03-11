@@ -142,14 +142,7 @@ func (m *Model) renderDetails() string {
 		lines = append(lines, "Warning: Could not fully verify device usage; proceed carefully")
 	}
 
-	removeLabel := "Remove(x)"
-	if m.cfg.ForceRemove {
-		removeLabel = m.styles.bad.Render(removeLabel)
-	}
-	if m.readOnly || !disk.Caps.CanRemove {
-		removeLabel += " disabled"
-	}
-	lines = append(lines, "", "Esc Close  l Read load  "+removeLabel)
+	lines = append(lines, "", m.renderDetailActions(disk), "Left/Right or Tab select  Enter activate  Esc back")
 	return m.styles.box.Render(strings.Join(lines, "\n"))
 }
 
@@ -170,6 +163,36 @@ func (m *Model) renderReadLoad() string {
 
 func (m *Model) wrapModal(title string, lines []string) string {
 	return m.styles.box.Render(m.styles.header.Render(title) + "\n\n" + strings.Join(lines, "\n"))
+}
+
+func (m *Model) renderDetailActions(disk *domain.Disk) string {
+	actions := []string{
+		m.renderDetailButton(detailActionClose, "Close", true, false),
+		m.renderDetailButton(detailActionReadLoad, "Read load", disk.Caps.CanReadLoad, false),
+		m.renderDetailButton(detailActionRemove, "Remove", !m.readOnly && disk.Caps.CanRemove, m.cfg.ForceRemove),
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, actions...)
+}
+
+func (m *Model) renderDetailButton(action detailAction, label string, enabled bool, danger bool) string {
+	if !enabled {
+		label += " disabled"
+	}
+
+	style := m.styles.button
+	if danger {
+		style = m.styles.danger
+	}
+	if !enabled {
+		style = m.styles.disabled
+	}
+	if m.detailAction == action {
+		style = m.styles.focused
+		if danger && enabled {
+			style = style.BorderForeground(lipgloss.Color("9"))
+		}
+	}
+	return style.Render(label)
 }
 
 func progressBar(current, total, width int) string {

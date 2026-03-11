@@ -48,6 +48,15 @@ type row struct {
 	Disk   *domain.Disk
 }
 
+type detailAction int
+
+const (
+	detailActionClose detailAction = iota
+	detailActionReadLoad
+	detailActionRemove
+	detailActionCount
+)
+
 type Model struct {
 	cfg      Config
 	width    int
@@ -65,6 +74,7 @@ type Model struct {
 	scanRunner     *scanRunner
 	removeRunner   *removeRunner
 	readLoader     *linux.ReadLoader
+	detailAction   detailAction
 
 	styles styles
 }
@@ -78,6 +88,10 @@ type styles struct {
 	warn     lipgloss.Style
 	bad      lipgloss.Style
 	box      lipgloss.Style
+	button   lipgloss.Style
+	focused  lipgloss.Style
+	disabled lipgloss.Style
+	danger   lipgloss.Style
 }
 
 func NewModel(cfg Config) *Model {
@@ -99,6 +113,10 @@ func newStyles(noColor bool) styles {
 			warn:     lipgloss.NewStyle().Bold(true),
 			bad:      lipgloss.NewStyle().Bold(true),
 			box:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(0, 1),
+			button:   lipgloss.NewStyle().Padding(0, 1),
+			focused:  lipgloss.NewStyle().Bold(true).Reverse(true).Padding(0, 1),
+			disabled: lipgloss.NewStyle().Faint(true).Padding(0, 1),
+			danger:   lipgloss.NewStyle().Bold(true).Padding(0, 1),
 		}
 	}
 	return styles{
@@ -110,6 +128,10 @@ func newStyles(noColor bool) styles {
 		warn:     lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 		bad:      lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
 		box:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")).Padding(0, 1),
+		button:   lipgloss.NewStyle().Padding(0, 1),
+		focused:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255")).Background(lipgloss.Color("24")).Padding(0, 1),
+		disabled: lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("8")).Padding(0, 1),
+		danger:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9")).Padding(0, 1),
 	}
 }
 
@@ -253,33 +275,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc", "q":
 			m.mode = viewTable
+		case "left", "shift+tab":
+			m.detailAction = (m.detailAction + detailActionCount - 1) % detailActionCount
+		case "right", "tab":
+			m.detailAction = (m.detailAction + 1) % detailActionCount
+		case "enter":
+			return m.runDetailAction()
 		case "l":
-			disk := m.selectedDisk()
-			if disk == nil || !disk.Caps.CanReadLoad {
-				m.mode = viewInfo
-				m.infoText = "Read load is unavailable in read-only mode"
-				return m, nil
-			}
-			loader, err := linux.StartReadLoad(disk.DevicePath, disk.SizeBytes)
-			if err != nil {
-				m.mode = viewInfo
-				m.infoText = "Read load failed: " + err.Error()
-				return m, nil
-			}
-			m.readLoader = loader
-			m.mode = viewReadLoad
-			return m, readLoadTick()
+			m.detailAction = detailActionReadLoad
+			return m.runDetailAction()
 		case "x":
-			disk := m.selectedDisk()
-			if disk == nil {
-				return m, nil
-			}
-			if m.readOnly || !disk.Caps.CanRemove {
-				m.mode = viewInfo
-				m.infoText = "Remove is unavailable in read-only mode"
-				return m, nil
-			}
-			m.mode = viewConfirmRemove
+			m.detailAction = detailActionRemove
+			return m.runDetailAction()
 		}
 		return m, nil
 	case viewReadLoad:
@@ -329,10 +336,50 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.startScan()
 	case "enter":
 		if m.selectedDisk() != nil {
+			m.detailAction = detailActionClose
 			m.mode = viewDetails
 		}
 	}
 	return m, nil
+}
+
+func (m *Model) runDetailAction() (tea.Model, tea.Cmd) {
+	disk := m.selectedDisk()
+	if disk == nil {
+		m.mode = viewTable
+		return m, nil
+	}
+
+	switch m.detailAction {
+	case detailActionClose:
+		m.mode = viewTable
+		return m, nil
+	case detailActionReadLoad:
+		if !disk.Caps.CanReadLoad {
+			m.mode = viewInfo
+			m.infoText = "Read load is unavailable in read-only mode"
+			return m, nil
+		}
+		loader, err := linux.StartReadLoad(disk.DevicePath, disk.SizeBytes)
+		if err != nil {
+			m.mode = viewInfo
+			m.infoText = "Read load failed: " + err.Error()
+			return m, nil
+		}
+		m.readLoader = loader
+		m.mode = viewReadLoad
+		return m, readLoadTick()
+	case detailActionRemove:
+		if m.readOnly || !disk.Caps.CanRemove {
+			m.mode = viewInfo
+			m.infoText = "Remove is unavailable in read-only mode"
+			return m, nil
+		}
+		m.mode = viewConfirmRemove
+		return m, nil
+	default:
+		return m, nil
+	}
 }
 
 func (m *Model) selectedDisk() *domain.Disk {

@@ -20,6 +20,17 @@ type Scanner struct {
 	PerDiskTimeout time.Duration
 }
 
+const (
+	ataAttrStartStopCount     = 4
+	ataAttrReallocatedSectors = 5
+	ataAttrPowerOnHours       = 9
+	ataAttrPowerCycleCount    = 12
+	ataAttrTemperatureAirflow = 190
+	ataAttrTemperature        = 194
+	ataAttrPendingSectors     = 197
+	ataAttrUncorrectable      = 198
+)
+
 func (s Scanner) Scan(ctx context.Context, progress chan<- domain.ScanProgress) domain.ScanResult {
 	names, err := discoverBlockDevices()
 	if err != nil {
@@ -300,28 +311,28 @@ func fillGeneric(info *domain.SmartInfo, generic *smart.GenericAttributes) {
 func fillAtaSMART(info *domain.SmartInfo, page *smart.AtaSmartPage) {
 	for id, attr := range page.Attrs {
 		switch id {
-		case 5:
+		case ataAttrReallocatedSectors:
 			v := attr.ValueRaw
 			info.ReallocatedSectors = &v
-		case 9:
+		case ataAttrPowerOnHours:
 			v := attr.ValueRaw
 			info.PowerOnHours = &v
-		case 12:
+		case ataAttrPowerCycleCount:
 			v := attr.ValueRaw
 			info.PowerCycleCount = &v
-		case 194, 190:
+		case ataAttrTemperature, ataAttrTemperatureAirflow:
 			temp, _, _, _, err := attr.ParseAsTemperature()
 			if err == nil {
 				v := uint64(temp)
 				info.TemperatureC = &v
 			}
-		case 197:
+		case ataAttrPendingSectors:
 			v := attr.ValueRaw
 			info.PendingSectors = &v
-		case 198:
+		case ataAttrUncorrectable:
 			v := attr.ValueRaw
 			info.UncorrectableErrors = &v
-		case 4:
+		case ataAttrStartStopCount:
 			v := attr.ValueRaw
 			info.StartStopCount = &v
 		}
