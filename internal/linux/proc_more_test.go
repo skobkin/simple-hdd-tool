@@ -11,10 +11,10 @@ func TestCollectUsageInfoMarksMountsAndSwap(t *testing.T) {
 	dir := t.TempDir()
 	mounts := filepath.Join(dir, "mountinfo")
 	swaps := filepath.Join(dir, "swaps")
-	if err := os.WriteFile(mounts, []byte("31 22 8:1 / /data rw,relatime - ext4 /dev/sda1 rw\n"), 0o644); err != nil {
+	if err := os.WriteFile(mounts, []byte("31 22 8:1 / /data rw,relatime - ext4 /dev/sda1 rw\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(swaps, []byte("Filename Type Size Used Priority\n/dev/sdb2 partition 1 0 -2\n"), 0o644); err != nil {
+	if err := os.WriteFile(swaps, []byte("Filename Type Size Used Priority\n/dev/sdb2 partition 1 0 -2\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

@@ -24,6 +24,7 @@ func TestDiscoverBlockDevicesFiltersAndSorts(t *testing.T) {
 		if path != "/sys/block" {
 			return nil, errors.New("unexpected path")
 		}
+
 		return []os.DirEntry{
 			fakeDirEntry{name: "sdb"},
 			fakeDirEntry{name: "sda"},
@@ -66,6 +67,7 @@ func TestInspectHoldersDetectsRaidAndDM(t *testing.T) {
 		if path != "/sys/block/sda/holders" {
 			return nil, errors.New("unexpected path")
 		}
+
 		return []os.DirEntry{
 			fakeDirEntry{name: "md0"},
 			fakeDirEntry{name: "dm-0"},
@@ -75,6 +77,7 @@ func TestInspectHoldersDetectsRaidAndDM(t *testing.T) {
 		if pattern != "/sys/block/md*/slaves/sda" {
 			return nil, errors.New("unexpected pattern")
 		}
+
 		return []string{"/sys/block/md127/slaves/sda"}, nil
 	}
 	t.Cleanup(func() {
@@ -225,6 +228,7 @@ func TestScanSMARTReturnsContextAndTimeoutErrors(t *testing.T) {
 		blocked := make(chan struct{})
 		scanSMARTSyncFunc = func(string) (domain.SmartInfo, identity, error) {
 			<-blocked
+
 			return domain.SmartInfo{}, identity{}, nil
 		}
 
@@ -242,6 +246,7 @@ func TestScanSMARTReturnsContextAndTimeoutErrors(t *testing.T) {
 		blocked := make(chan struct{})
 		scanSMARTSyncFunc = func(string) (domain.SmartInfo, identity, error) {
 			<-blocked
+
 			return domain.SmartInfo{}, identity{}, nil
 		}
 
@@ -391,6 +396,7 @@ func TestIsWritableUsesTrustedPaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return f, nil
 	}
 	if !isWritable("/sys/block/sda/device/delete") {
@@ -409,10 +415,10 @@ func TestIsWritableUsesTrustedPaths(t *testing.T) {
 func writeText(t *testing.T, path, content string) {
 	t.Helper()
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -51,12 +51,14 @@ func TestRemoverRemoveGuardsAndSuccess(t *testing.T) {
 			if stats <= 3 {
 				return fakeFileInfo("exists"), nil
 			}
+
 			return nil, os.ErrNotExist
 		}
 		writeFile = func(string, []byte, os.FileMode) error { return nil }
 		now := time.Unix(0, 0)
 		timeNow = func() time.Time {
 			now = now.Add(100 * time.Millisecond)
+
 			return now
 		}
 		sleep = func(time.Duration) {}
@@ -77,7 +79,9 @@ func TestRemoverRemoveGuardsAndSuccess(t *testing.T) {
 func TestRemoverRemoveErrorBranches(t *testing.T) {
 	t.Run("missing delete path", func(t *testing.T) {
 		oldStat := statPath
-		statPath = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+		statPath = func(string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		}
 		t.Cleanup(func() { statPath = oldStat })
 
 		res := (Remover{}).Remove(context.Background(), domain.Disk{
@@ -127,6 +131,7 @@ func TestRemoverRemoveErrorBranches(t *testing.T) {
 		now := time.Unix(0, 0)
 		timeNow = func() time.Time {
 			now = now.Add(100 * time.Millisecond)
+
 			return now
 		}
 		sleep = func(time.Duration) {}
@@ -162,6 +167,7 @@ func TestRemoverRemoveErrorBranches(t *testing.T) {
 		now := time.Unix(0, 0)
 		timeNow = func() time.Time {
 			now = now.Add(2 * time.Second)
+
 			return now
 		}
 		sleep = func(time.Duration) {}

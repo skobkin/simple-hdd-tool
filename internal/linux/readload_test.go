@@ -30,6 +30,7 @@ func TestStartReadLoadFallsBackFromDirectIO(t *testing.T) {
 		if openCalls == 1 {
 			return -1, syscall.EINVAL
 		}
+
 		return 42, nil
 	}
 	readCalls := 0
@@ -38,6 +39,7 @@ func TestStartReadLoadFallsBackFromDirectIO(t *testing.T) {
 		if readCalls == 1 {
 			return len(p), nil
 		}
+
 		return 0, context.Canceled
 	}
 	unixFadvise = func(int, int64, int64, int) error { return nil }
@@ -134,6 +136,7 @@ func TestReadLoaderRunHandlesErrorBranches(t *testing.T) {
 			if reads == 1 {
 				return 4096, nil
 			}
+
 			return 0, context.Canceled
 		}
 		unixFadvise = func(int, int64, int64, int) error { return syscall.EIO }
@@ -179,8 +182,10 @@ func TestReadLoaderRunHandlesErrorBranches(t *testing.T) {
 			calls++
 			if calls == 1 {
 				cancel()
+
 				return 4096, nil
 			}
+
 			return 0, nil
 		}
 		unixFadvise = func(int, int64, int64, int) error { return unix.ENOSYS }

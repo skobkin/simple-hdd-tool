@@ -23,7 +23,7 @@ var (
 	readFile          = os.ReadFile
 	globPaths         = filepath.Glob
 	evalSymlinks      = filepath.EvalSymlinks
-	openFileWritable  = func(path string) (*os.File, error) { return os.OpenFile(path, os.O_WRONLY, 0) }
+	openFileWritable  = func(path string) (*os.File, error) { return os.OpenFile(path, os.O_WRONLY, 0) } // #nosec G304 -- callers restrict paths to trusted procfs/sysfs roots
 	geteuid           = os.Geteuid
 	lookPath          = exec.LookPath
 	commandContext    = exec.CommandContext
