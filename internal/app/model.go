@@ -16,6 +16,7 @@ import (
 )
 
 var startReadLoad = linux.StartReadLoad
+var snapshotReadLoad = func(loader *linux.ReadLoader) domain.ReadLoadSnapshot { return loader.Snapshot() }
 
 type viewMode int
 

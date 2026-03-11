@@ -343,23 +343,52 @@ func renderSmartctlHealthText(styles styles, health domain.SmartctlHealth) strin
 }
 
 func (m *Model) renderReadLoad() string {
-	snap := m.readLoader.Snapshot()
-	lines := []string{
-		"Device: " + snap.DevicePath,
-		"Elapsed: " + format.ElapsedShort(snap.Elapsed),
-		"Speed: " + format.RateBytes(snap.BytesPerSecond),
-		"Total read: " + format.SizeBytes(snap.BytesRead),
+	snap := snapshotReadLoad(m.readLoader)
+	innerWidth := m.modalInnerWidth()
+	rateLine := m.styles.focused.Render(" Read rate: " + format.RateBytes(snap.BytesPerSecond) + " ")
+	summaryLine := "Elapsed: " + format.ElapsedShort(snap.Elapsed) + "  Data read: " + format.SizeBytes(snap.BytesRead)
+	summaryLines := []string{summaryLine}
+	if runewidth.StringWidth(summaryLine) > innerWidth {
+		summaryLines = []string{
+			"Elapsed: " + format.ElapsedShort(snap.Elapsed),
+			"Data read: " + format.SizeBytes(snap.BytesRead),
+		}
 	}
-	if snap.DirectIOMessage != "" {
-		lines = append(lines, "Note: "+snap.DirectIOMessage)
-	}
-	lines = append(lines, "", m.styles.focused.Render("Stop"))
 
-	return m.wrapModal("Read Load", lines)
+	modeLine := "Mode: direct I/O"
+	if snap.DirectIOMessage != "" {
+		modeLine = m.styles.warn.Render("Warning: " + snap.DirectIOMessage)
+	}
+
+	lines := []string{
+		m.styles.faint.Render("Generating sustained read activity"),
+		"",
+		rateLine,
+	}
+	lines = append(lines, summaryLines...)
+	lines = append(lines,
+		"",
+		"Device: "+snap.DevicePath,
+		modeLine,
+		"",
+		m.styles.focused.Render("Stop"),
+		m.styles.faint.Render("Enter/S/Esc/Q stop"),
+	)
+
+	return m.wrapModal("Read Load", wrapLines(lines, innerWidth))
 }
 
 func (m *Model) wrapModal(title string, lines []string) string {
 	return m.styles.box.Render(m.styles.header.Render(title) + "\n\n" + strings.Join(lines, "\n"))
+}
+
+func (m *Model) modalInnerWidth() int {
+	width := m.width - m.styles.box.GetHorizontalFrameSize()
+	if width < 24 {
+		return 24
+	}
+
+	return width
 }
 
 func (m *Model) renderDetailActions(disk *domain.Disk) string {

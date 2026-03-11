@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -206,14 +207,89 @@ func assertSubstringsInOrder(t *testing.T, text string, substrings ...string) {
 func TestRenderReadLoadShowsStopButton(t *testing.T) {
 	m := NewModel(Config{})
 	m.mode = viewReadLoad
+	m.width = 64
 	m.readLoader = &linux.ReadLoader{}
+	oldSnapshotReadLoad := snapshotReadLoad
+	snapshotReadLoad = func(*linux.ReadLoader) domain.ReadLoadSnapshot {
+		return domain.ReadLoadSnapshot{
+			DevicePath:     "/dev/sda",
+			DirectIO:       true,
+			Elapsed:        12 * time.Second,
+			BytesRead:      2400000000,
+			BytesPerSecond: 201000000,
+		}
+	}
+	t.Cleanup(func() { snapshotReadLoad = oldSnapshotReadLoad })
 
 	out := m.renderReadLoad()
+	plain := ansi.Strip(out)
 
-	if !strings.Contains(out, "Stop") {
+	if !strings.Contains(plain, "Stop") {
 		t.Fatalf("renderReadLoad() did not include stop button:\n%s", out)
 	}
-	if strings.Contains(out, "Enter stop") {
-		t.Fatalf("renderReadLoad() still included removed stop hint:\n%s", out)
+	assertSubstringsInOrder(t, plain,
+		"Read Load",
+		"Generating sustained read activity",
+		"Read rate: 201 MB/s",
+		"Elapsed: 12s  Data read: 2.4 GB",
+		"Device: /dev/sda",
+		"Mode: direct I/O",
+		"Enter/S/Esc/Q stop",
+	)
+}
+
+func TestRenderReadLoadShowsBufferedFallbackWarning(t *testing.T) {
+	m := NewModel(Config{})
+	m.mode = viewReadLoad
+	m.width = 72
+	m.readLoader = &linux.ReadLoader{}
+	oldSnapshotReadLoad := snapshotReadLoad
+	snapshotReadLoad = func(*linux.ReadLoader) domain.ReadLoadSnapshot {
+		return domain.ReadLoadSnapshot{
+			DevicePath:      "/dev/sdb",
+			Elapsed:         3 * time.Second,
+			BytesRead:       32000000,
+			BytesPerSecond:  11000000,
+			DirectIOMessage: "direct I/O unavailable; using buffered reads",
+		}
+	}
+	t.Cleanup(func() { snapshotReadLoad = oldSnapshotReadLoad })
+
+	out := m.renderReadLoad()
+	plain := ansi.Strip(out)
+
+	if !strings.Contains(plain, "Warning: direct I/O unavailable; using buffered reads") {
+		t.Fatalf("renderReadLoad() did not include buffered fallback warning:\n%s", out)
+	}
+	if strings.Contains(plain, "Mode: direct I/O") {
+		t.Fatalf("renderReadLoad() showed direct I/O mode during buffered fallback:\n%s", out)
+	}
+}
+
+func TestRenderReadLoadWrapsSummaryInNarrowWidth(t *testing.T) {
+	m := NewModel(Config{NoColor: true})
+	m.mode = viewReadLoad
+	m.width = 32
+	m.readLoader = &linux.ReadLoader{}
+	oldSnapshotReadLoad := snapshotReadLoad
+	snapshotReadLoad = func(*linux.ReadLoader) domain.ReadLoadSnapshot {
+		return domain.ReadLoadSnapshot{
+			DevicePath:     "/dev/sdc",
+			DirectIO:       true,
+			Elapsed:        2*time.Minute + 5*time.Second,
+			BytesRead:      9876543210,
+			BytesPerSecond: 123456789,
+		}
+	}
+	t.Cleanup(func() { snapshotReadLoad = oldSnapshotReadLoad })
+
+	out := m.renderReadLoad()
+	plain := ansi.Strip(out)
+
+	if !strings.Contains(plain, "Elapsed: 2m 5s") || !strings.Contains(plain, "Data read: 9.9 GB") {
+		t.Fatalf("renderReadLoad() did not split summary for narrow width:\n%s", out)
+	}
+	if !strings.Contains(plain, "Read rate: 123 MB/s") {
+		t.Fatalf("renderReadLoad() lost the primary read-rate signal:\n%s", out)
 	}
 }
