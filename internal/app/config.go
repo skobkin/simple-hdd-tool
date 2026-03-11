@@ -24,7 +24,7 @@ type Config struct {
 func ParseConfig(args []string) (Config, error) {
 	cfg := Config{
 		GroupBy: domain.GroupByModel,
-		SortBy:  domain.SortBySize,
+		SortBy:  domain.SortByHours,
 	}
 
 	fs := flag.NewFlagSet(buildinfo.AppName, flag.ContinueOnError)

@@ -1,6 +1,23 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/skobkin/simple-hdd-tool/internal/domain"
+)
+
+func TestParseConfigDefaults(t *testing.T) {
+	cfg, err := ParseConfig(nil)
+	if err != nil {
+		t.Fatalf("ParseConfig returned error: %v", err)
+	}
+	if cfg.GroupBy != domain.GroupByModel {
+		t.Fatalf("unexpected default group-by: %s", cfg.GroupBy)
+	}
+	if cfg.SortBy != domain.SortByHours {
+		t.Fatalf("unexpected default sort-by: %s", cfg.SortBy)
+	}
+}
 
 func TestParseConfig(t *testing.T) {
 	cfg, err := ParseConfig([]string{"--group-by=size", "--sort-by=hours", "--force-remove"})
