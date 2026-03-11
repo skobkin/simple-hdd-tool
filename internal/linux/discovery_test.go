@@ -1,6 +1,10 @@
 package linux
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/skobkin/simple-hdd-tool/internal/domain"
+)
 
 func TestParseSmartctlFamily(t *testing.T) {
 	t.Parallel()
@@ -47,5 +51,54 @@ Device Model:     ST8000AS0002-1NA17Z
 				t.Fatalf("parseSmartctlFamily() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestClassifyProblemIncludesSmartCounterDetails(t *testing.T) {
+	t.Parallel()
+
+	errorCount := uint64(1)
+
+	health, problem, details, note := classifyProblem(domain.Disk{
+		Smart: domain.SmartInfo{
+			ErrorCount: &errorCount,
+		},
+	})
+
+	if health != domain.HealthWarning {
+		t.Fatalf("health = %q, want %q", health, domain.HealthWarning)
+	}
+	if problem != "health warning" {
+		t.Fatalf("problem = %q, want %q", problem, "health warning")
+	}
+	if details != "SMART error log count=1" {
+		t.Fatalf("details = %q", details)
+	}
+	if note != "SMART counters indicate potential media issues" {
+		t.Fatalf("note = %q", note)
+	}
+}
+
+func TestClassifyProblemIncludesKernelUsageDetails(t *testing.T) {
+	t.Parallel()
+
+	health, problem, details, note := classifyProblem(domain.Disk{
+		Usage: domain.UsageFlags{
+			Mounted: true,
+			Swap:    true,
+		},
+	})
+
+	if health != domain.HealthWarning {
+		t.Fatalf("health = %q, want %q", health, domain.HealthWarning)
+	}
+	if problem != "mounted" {
+		t.Fatalf("problem = %q, want %q", problem, "mounted")
+	}
+	if details != "mounted; swap active" {
+		t.Fatalf("details = %q", details)
+	}
+	if note != "device is in active use" {
+		t.Fatalf("note = %q", note)
 	}
 }

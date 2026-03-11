@@ -151,7 +151,7 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 		disk.Warnings = append(disk.Warnings, "smartctl info read failed: "+err.Error())
 	}
 
-	disk.Health, disk.Problem, disk.ProblemNote = classifyProblem(disk)
+	disk.Health, disk.Problem, disk.ProblemDetails, disk.ProblemNote = classifyProblem(disk)
 	return disk
 }
 
@@ -386,30 +386,30 @@ func fillAtaSMART(info *domain.SmartInfo, page *smart.AtaSmartPage) {
 	}
 }
 
-func classifyProblem(d domain.Disk) (domain.Health, string, string) {
+func classifyProblem(d domain.Disk) (domain.Health, string, string, string) {
 	if d.Smart.ReadError != "" {
-		return domain.HealthWarning, "SMART read failure", d.Smart.ReadError
+		return domain.HealthWarning, "SMART read failure", d.Smart.ReadError, d.Smart.ReadError
 	}
 	if d.Usage.Mounted || d.Usage.Swap {
-		return domain.HealthWarning, "mounted", "device is in active use"
+		return domain.HealthWarning, "mounted", usageProblemDetails(d.Usage), "device is in active use"
 	}
 	if d.Usage.RAIDMember || d.Usage.DMHolder {
-		return domain.HealthWarning, "raid member", "device has holders and may be in mdraid or device-mapper"
+		return domain.HealthWarning, "raid member", usageProblemDetails(d.Usage), "device has holders and may be in mdraid or device-mapper"
 	}
 
 	if severeCount(d.Smart.ReallocatedSectors) || severeCount(d.Smart.PendingSectors) || severeCount(d.Smart.UncorrectableErrors) {
-		return domain.HealthFailing, "disk failure", "critical SMART counters are non-zero"
+		return domain.HealthFailing, "disk failure", smartProblemDetails(d.Smart), "critical SMART counters are non-zero"
 	}
 	if warnedCount(d.Smart.ReallocatedSectors) || warnedCount(d.Smart.PendingSectors) || warnedCount(d.Smart.UncorrectableErrors) || warnedCount(d.Smart.ErrorCount) {
-		return domain.HealthWarning, "health warning", "SMART counters indicate potential media issues"
+		return domain.HealthWarning, "health warning", smartProblemDetails(d.Smart), "SMART counters indicate potential media issues"
 	}
 	if d.Usage.ChecksPartial {
-		return domain.HealthWarning, "unknown", "could not fully verify device usage"
+		return domain.HealthWarning, "unknown", "usage verification incomplete", "could not fully verify device usage"
 	}
 	if d.Smart.Available {
-		return domain.HealthHealthy, "—", ""
+		return domain.HealthHealthy, "—", "", ""
 	}
-	return domain.HealthUnknown, "unknown", ""
+	return domain.HealthUnknown, "unknown", "", ""
 }
 
 func severeCount(v *uint64) bool {
@@ -418,6 +418,40 @@ func severeCount(v *uint64) bool {
 
 func warnedCount(v *uint64) bool {
 	return v != nil && *v > 0
+}
+
+func usageProblemDetails(usage domain.UsageFlags) string {
+	parts := make([]string, 0, 4)
+	if usage.Mounted {
+		parts = append(parts, "mounted")
+	}
+	if usage.Swap {
+		parts = append(parts, "swap active")
+	}
+	if usage.RAIDMember {
+		parts = append(parts, "mdraid holder present")
+	}
+	if usage.DMHolder {
+		parts = append(parts, "device-mapper holder present")
+	}
+	return strings.Join(parts, "; ")
+}
+
+func smartProblemDetails(info domain.SmartInfo) string {
+	parts := make([]string, 0, 4)
+	if info.ReallocatedSectors != nil && *info.ReallocatedSectors > 0 {
+		parts = append(parts, "reallocated sectors="+strconv.FormatUint(*info.ReallocatedSectors, 10))
+	}
+	if info.PendingSectors != nil && *info.PendingSectors > 0 {
+		parts = append(parts, "pending sectors="+strconv.FormatUint(*info.PendingSectors, 10))
+	}
+	if info.UncorrectableErrors != nil && *info.UncorrectableErrors > 0 {
+		parts = append(parts, "uncorrectable errors="+strconv.FormatUint(*info.UncorrectableErrors, 10))
+	}
+	if info.ErrorCount != nil && *info.ErrorCount > 0 {
+		parts = append(parts, "SMART error log count="+strconv.FormatUint(*info.ErrorCount, 10))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func readText(path string) string {

@@ -80,23 +80,24 @@ type SmartInfo struct {
 }
 
 type Disk struct {
-	ID          string
-	Name        string
-	DevicePath  string
-	SysfsPath   string
-	Family      string
-	Model       string
-	Serial      string
-	SizeBytes   uint64
-	Transport   string
-	BlockTime   time.Duration
-	Problem     string
-	ProblemNote string
-	Health      Health
-	Warnings    []string
-	Smart       SmartInfo
-	Usage       UsageFlags
-	Caps        Capabilities
+	ID             string
+	Name           string
+	DevicePath     string
+	SysfsPath      string
+	Family         string
+	Model          string
+	Serial         string
+	SizeBytes      uint64
+	Transport      string
+	BlockTime      time.Duration
+	Problem        string
+	ProblemDetails string
+	ProblemNote    string
+	Health         Health
+	Warnings       []string
+	Smart          SmartInfo
+	Usage          UsageFlags
+	Caps           Capabilities
 }
 
 type ScanProgress struct {

@@ -118,6 +118,9 @@ func (m *Model) renderDetails() string {
 		"Health: " + health,
 		"Problem: " + fallback(disk.Problem),
 	}
+	if disk.ProblemDetails != "" {
+		lines = append(lines, "Problem details: "+disk.ProblemDetails)
+	}
 	if disk.Smart.TemperatureC != nil {
 		lines = append(lines, fmt.Sprintf("Temperature: %d C", *disk.Smart.TemperatureC))
 	}
