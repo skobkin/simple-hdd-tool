@@ -9,7 +9,7 @@ clone:
 
 steps:
   fmt:
-    image: golang:1.25
+    image: golang:1.25.6
     commands:
       - |
         fmt_out=$(gofmt -l ./cmd ./internal 2>/dev/null)
@@ -27,21 +27,21 @@ steps:
       - golangci-lint run
 
   vet:
-    image: golang:1.25
+    image: golang:1.25.6
     environment:
       GOCACHE: /tmp/.gocache
     commands:
       - go vet ./...
 
   test:
-    image: golang:1.25
+    image: golang:1.25.6
     environment:
       GOCACHE: /tmp/.gocache
     commands:
       - go test ./...
 
   build:
-    image: golang:1.25
+    image: golang:1.25.6
     depends_on:
       - fmt
       - lint
@@ -55,7 +55,7 @@ steps:
       - event: push
 
   release-forgejo:
-    image: goreleaser/goreleaser-cross:v1.25-v2.12.7
+    image: goreleaser/goreleaser:v2.13.3
     depends_on:
       - fmt
       - lint
