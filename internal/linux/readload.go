@@ -63,7 +63,11 @@ func (r *ReadLoader) start(ctx context.Context) error {
 }
 
 func (r *ReadLoader) run(ctx context.Context, fd int) {
-	defer unix.Close(fd)
+	defer func() {
+		if err := unix.Close(fd); err != nil {
+			r.fail(err)
+		}
+	}()
 	buf := make([]byte, 1024*1024+4096)
 	aligned := align4096(buf)
 	var offset int64
@@ -80,16 +84,10 @@ func (r *ReadLoader) run(ctx context.Context, fd int) {
 		n, err := unix.Pread(fd, aligned, offset)
 		if err != nil {
 			if errors.Is(err, syscall.EINVAL) && r.directIO {
-				r.mu.Lock()
-				r.lastErr = errors.New("direct I/O read failed")
-				r.stopped = true
-				r.mu.Unlock()
+				r.fail(errors.New("direct I/O read failed"))
 				return
 			}
-			r.mu.Lock()
-			r.lastErr = err
-			r.stopped = true
-			r.mu.Unlock()
+			r.fail(err)
 			return
 		}
 		if n == 0 {
@@ -104,7 +102,10 @@ func (r *ReadLoader) run(ctx context.Context, fd int) {
 		r.bytes += uint64(n)
 		r.mu.Unlock()
 		if !r.directIO {
-			_ = unix.Fadvise(fd, offset-int64(n), int64(n), unix.FADV_DONTNEED)
+			if err := unix.Fadvise(fd, offset-int64(n), int64(n), unix.FADV_DONTNEED); err != nil && !errors.Is(err, syscall.ENOSYS) && !errors.Is(err, syscall.EINVAL) {
+				r.fail(err)
+				return
+			}
 		}
 	}
 }
@@ -138,4 +139,13 @@ func align4096(buf []byte) []byte {
 	ptr := uintptr(unsafe.Pointer(&buf[0]))
 	offset := int((base - (ptr-1)%block) % block)
 	return buf[offset : offset+1024*1024]
+}
+
+func (r *ReadLoader) fail(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.lastErr == nil {
+		r.lastErr = err
+	}
+	r.stopped = true
 }

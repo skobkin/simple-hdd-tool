@@ -283,15 +283,19 @@ func scanSMART(ctx context.Context, devicePath string, timeout time.Duration) (d
 	}
 }
 
-func scanSMARTSync(devicePath string) (domain.SmartInfo, identity, error) {
+func scanSMARTSync(devicePath string) (info domain.SmartInfo, id identity, err error) {
 	dev, err := smart.Open(devicePath)
 	if err != nil {
 		return domain.SmartInfo{}, identity{}, err
 	}
-	defer dev.Close()
+	defer func() {
+		if closeErr := dev.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
-	info := domain.SmartInfo{Available: true}
-	id := identity{}
+	info = domain.SmartInfo{Available: true}
+	id = identity{}
 	switch d := dev.(type) {
 	case *smart.SataDevice:
 		ident, err := d.Identify()

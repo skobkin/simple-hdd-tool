@@ -19,64 +19,14 @@ func CollectUsageInfo(baseDevices map[string]struct{}) map[string]UsageInfo {
 		out[dev] = UsageInfo{}
 	}
 
-	mounts, err := os.Open("/proc/self/mountinfo")
-	if err == nil {
-		defer mounts.Close()
-		s := bufio.NewScanner(mounts)
-		for s.Scan() {
-			fields := strings.Fields(s.Text())
-			if len(fields) < 10 {
-				continue
-			}
-			sep := -1
-			for i, f := range fields {
-				if f == "-" {
-					sep = i
-					break
-				}
-			}
-			if sep == -1 || sep+2 >= len(fields) {
-				continue
-			}
-			source := fields[sep+2]
-			base := baseBlockDevice(source)
-			if base == "" {
-				continue
-			}
-			info := out[base]
-			info.Mounted = true
-			out[base] = info
-		}
-	} else {
+	if err := collectMountedUsage(out); err != nil {
 		for dev, info := range out {
 			info.ChecksPart = true
 			out[dev] = info
 		}
 	}
 
-	swaps, err := os.Open("/proc/swaps")
-	if err == nil {
-		defer swaps.Close()
-		s := bufio.NewScanner(swaps)
-		first := true
-		for s.Scan() {
-			if first {
-				first = false
-				continue
-			}
-			fields := strings.Fields(s.Text())
-			if len(fields) < 1 {
-				continue
-			}
-			base := baseBlockDevice(fields[0])
-			if base == "" {
-				continue
-			}
-			info := out[base]
-			info.Swap = true
-			out[base] = info
-		}
-	} else {
+	if err := collectSwapUsage(out); err != nil {
 		for dev, info := range out {
 			info.ChecksPart = true
 			out[dev] = info
@@ -97,4 +47,77 @@ func baseBlockDevice(device string) string {
 		})
 	}
 	return ""
+}
+
+func collectMountedUsage(out map[string]UsageInfo) (err error) {
+	mounts, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := mounts.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+
+	s := bufio.NewScanner(mounts)
+	for s.Scan() {
+		fields := strings.Fields(s.Text())
+		if len(fields) < 10 {
+			continue
+		}
+		sep := -1
+		for i, f := range fields {
+			if f == "-" {
+				sep = i
+				break
+			}
+		}
+		if sep == -1 || sep+2 >= len(fields) {
+			continue
+		}
+		base := baseBlockDevice(fields[sep+2])
+		if base == "" {
+			continue
+		}
+		info := out[base]
+		info.Mounted = true
+		out[base] = info
+	}
+
+	return s.Err()
+}
+
+func collectSwapUsage(out map[string]UsageInfo) (err error) {
+	swaps, err := os.Open("/proc/swaps")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := swaps.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+
+	s := bufio.NewScanner(swaps)
+	first := true
+	for s.Scan() {
+		if first {
+			first = false
+			continue
+		}
+		fields := strings.Fields(s.Text())
+		if len(fields) < 1 {
+			continue
+		}
+		base := baseBlockDevice(fields[0])
+		if base == "" {
+			continue
+		}
+		info := out[base]
+		info.Swap = true
+		out[base] = info
+	}
+
+	return s.Err()
 }

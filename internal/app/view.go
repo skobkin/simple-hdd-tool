@@ -38,7 +38,7 @@ func (m *Model) renderScan() string {
 		m.styles.header.Render("simple-hdd-tool"),
 		"",
 		"Scanning SATA/SAS disks",
-		progressBar(m.scanProgress.Current, m.scanProgress.Total, max(24, m.width-10)),
+		progressBar(m.scanProgress.Current, m.scanProgress.Total, maxInt(24, m.width-10)),
 	}
 	if m.scanProgress.Text != "" {
 		lines = append(lines, m.scanProgress.Text)
@@ -88,7 +88,7 @@ func (m *Model) renderDiskRow(d domain.Disk) string {
 		trunc(d.Serial, 14),
 		trunc(d.DevicePath, 10),
 		trunc(format.DurationHours(d.Smart.PowerOnHours), 12),
-		trunc(d.Problem, max(8, m.width-80)),
+		trunc(d.Problem, maxInt(8, m.width-80)),
 	)
 }
 
@@ -232,7 +232,7 @@ func trunc(v string, width int) string {
 	return b.String()
 }
 
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

@@ -242,6 +242,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.mode {
+	case viewTable:
+		break
 	case viewScanning, viewRemoving:
 		if msg.String() == "ctrl+c" || msg.String() == "q" {
 			return m, tea.Quit
