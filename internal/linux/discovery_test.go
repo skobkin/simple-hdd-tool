@@ -21,7 +21,7 @@ func TestParseSmartctlFamily(t *testing.T) {
 === START OF INFORMATION SECTION ===
 Model Family:     Seagate Archive HDD (SMR)
 Device Model:     ST8000AS0002-1NA17Z
-Serial Number:    Z123DGBG
+Serial Number:    TEST-SN-01
 `,
 			want: "Seagate Archive HDD (SMR)",
 		},

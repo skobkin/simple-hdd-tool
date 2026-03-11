@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func TestRenderDiskRowStaysSingleLine(t *testing.T) {
 	row := m.renderDiskRow(domain.Disk{
 		Model:      "HGST HUS728T8TALE6L4",
 		Family:     "Some Very Long Family Name",
-		Serial:     "Z840DGBG",
+		Serial:     "SERIAL01",
 		DevicePath: "/dev/sdb",
 		Problem:    "health warning",
 		SizeBytes:  8001563222016,
@@ -139,6 +140,50 @@ func TestRenderDiskRowShowsSmartctlHealthIndicator(t *testing.T) {
 
 	if !strings.Contains(row, "●") {
 		t.Fatalf("renderDiskRow() did not include smartctl health indicator:\n%s", row)
+	}
+}
+
+func TestRenderDiskRowExpandsFamilyBeforeLeavingSerialPadding(t *testing.T) {
+	m := NewModel(Config{})
+	m.width = 120
+	disk := domain.Disk{
+		Model:      "ST10000NM0086-2AA101",
+		Family:     "Seagate Enterprise Capacity",
+		Serial:     "SERIAL02",
+		DevicePath: "/dev/sdb",
+		Problem:    "healthy",
+		SizeBytes:  10000000000000,
+	}
+	m.disks = []domain.Disk{disk}
+
+	row := ansi.Strip(m.renderDiskRow(disk))
+
+	if !strings.Contains(row, "Seagate Enterprise") {
+		t.Fatalf("renderDiskRow() did not allocate enough family width:\n%s", row)
+	}
+	if strings.Contains(row, "SERIAL02      ") {
+		t.Fatalf("renderDiskRow() kept oversized serial padding:\n%s", row)
+	}
+}
+
+func TestRenderDiskRowPadsHealthColumnBeforeProblems(t *testing.T) {
+	m := NewModel(Config{})
+	m.width = 120
+
+	row := ansi.Strip(m.renderDiskRow(domain.Disk{
+		Model:      "Model",
+		Family:     "Family",
+		Serial:     "Serial",
+		DevicePath: "/dev/sdb",
+		Problem:    "disk failure",
+		SizeBytes:  8001563222016,
+		Smart: domain.SmartInfo{
+			OverallHealth: domain.SmartctlHealthPassed,
+		},
+	}))
+
+	if !regexp.MustCompile(`●\s{2,}disk failure`).MatchString(row) {
+		t.Fatalf("renderDiskRow() did not pad the health column before problems:\n%s", row)
 	}
 }
 

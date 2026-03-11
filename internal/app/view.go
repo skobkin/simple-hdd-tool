@@ -88,21 +88,191 @@ func (m *Model) renderTable() string {
 }
 
 func (m *Model) renderColumns() string {
-	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %-6s %s",
-		"size", "model", "family", "serial", "dev", "time", "health", "problems")
+	return m.renderTableHeader(m.tableLayout())
 }
 
 func (m *Model) renderDiskRow(d domain.Disk) string {
-	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %-6s %s",
-		trunc(format.SizeBytes(d.SizeBytes), 9),
-		trunc(d.Model, 18),
-		trunc(d.Family, 10),
-		trunc(d.Serial, 14),
-		trunc(d.DevicePath, 10),
-		format.DurationHoursCompact(d.Smart.PowerOnHours, 13),
-		smartctlHealthIndicator(m.styles, d.Smart.OverallHealth),
-		trunc(d.Problem, maxInt(8, m.width-87)),
-	)
+	return m.renderTableDiskRow(d, m.tableLayout(d))
+}
+
+type tableColumnLayout struct {
+	width int
+	last  bool
+}
+
+func (m *Model) renderTableHeader(layout map[string]tableColumnLayout) string {
+	return strings.Join([]string{
+		renderTableCell("size", layout["size"]),
+		renderTableCell("model", layout["model"]),
+		renderTableCell("family", layout["family"]),
+		renderTableCell("serial", layout["serial"]),
+		renderTableCell("dev", layout["dev"]),
+		renderTableCell("time", layout["time"]),
+		renderTableCell("health", layout["health"]),
+		renderTableCell("problems", layout["problems"]),
+	}, " ")
+}
+
+func (m *Model) renderTableDiskRow(d domain.Disk, layout map[string]tableColumnLayout) string {
+	return strings.Join([]string{
+		renderTableCell(format.SizeBytes(d.SizeBytes), layout["size"]),
+		renderTableCell(d.Model, layout["model"]),
+		renderTableCell(d.Family, layout["family"]),
+		renderTableCell(d.Serial, layout["serial"]),
+		renderTableCell(d.DevicePath, layout["dev"]),
+		renderTableCell(format.DurationHoursCompact(d.Smart.PowerOnHours, layout["time"].width), layout["time"]),
+		renderStyledTableCell(smartctlHealthIndicator(m.styles, d.Smart.OverallHealth), layout["health"]),
+		renderTableCell(d.Problem, layout["problems"]),
+	}, " ")
+}
+
+func (m *Model) tableLayout(extra ...domain.Disk) map[string]tableColumnLayout {
+	type columnSpec struct {
+		key      string
+		header   string
+		minWidth int
+		maxWidth int
+	}
+
+	columns := []columnSpec{
+		{key: "size", header: "size", minWidth: 6, maxWidth: 9},
+		{key: "model", header: "model", minWidth: 8, maxWidth: 24},
+		{key: "family", header: "family", minWidth: 8, maxWidth: 24},
+		{key: "serial", header: "serial", minWidth: 6, maxWidth: 20},
+		{key: "dev", header: "dev", minWidth: 8, maxWidth: 10},
+		{key: "time", header: "time", minWidth: 6, maxWidth: 13},
+		{key: "health", header: "health", minWidth: 6, maxWidth: 6},
+		{key: "problems", header: "problems", minWidth: 8, maxWidth: 48},
+	}
+
+	desired := make(map[string]int, len(columns))
+	for _, column := range columns {
+		desired[column.key] = runewidth.StringWidth(column.header)
+	}
+
+	disks := append(append([]domain.Disk(nil), m.disks...), extra...)
+	for _, d := range disks {
+		desired["size"] = maxInt(desired["size"], runewidth.StringWidth(format.SizeBytes(d.SizeBytes)))
+		desired["model"] = maxInt(desired["model"], runewidth.StringWidth(normalizeTableValue(d.Model)))
+		desired["family"] = maxInt(desired["family"], runewidth.StringWidth(normalizeTableValue(d.Family)))
+		desired["serial"] = maxInt(desired["serial"], runewidth.StringWidth(normalizeTableValue(d.Serial)))
+		desired["dev"] = maxInt(desired["dev"], runewidth.StringWidth(normalizeTableValue(d.DevicePath)))
+		desired["time"] = maxInt(desired["time"], runewidth.StringWidth(format.DurationHoursCompact(d.Smart.PowerOnHours, 64)))
+		desired["health"] = maxInt(desired["health"], lipgloss.Width(smartctlHealthIndicator(m.styles, d.Smart.OverallHealth)))
+		desired["problems"] = maxInt(desired["problems"], runewidth.StringWidth(normalizeTableValue(d.Problem)))
+	}
+
+	layout := make(map[string]tableColumnLayout, len(columns))
+	totalWidth := 0
+	for idx, column := range columns {
+		width := desired[column.key]
+		if width < column.minWidth {
+			width = column.minWidth
+		}
+		if width > column.maxWidth {
+			width = column.maxWidth
+		}
+		layout[column.key] = tableColumnLayout{
+			width: width,
+			last:  idx == len(columns)-1,
+		}
+		totalWidth += width
+	}
+
+	if len(columns) > 1 {
+		totalWidth += len(columns) - 1
+	}
+	if m.width > 0 && totalWidth > m.width {
+		deficit := totalWidth - m.width
+		shrinkOrder := []string{"problems", "model", "family", "serial"}
+		minimum := map[string]int{
+			"problems": 8,
+			"model":    8,
+			"family":   8,
+			"serial":   6,
+		}
+		for deficit > 0 {
+			shrank := false
+			for _, key := range shrinkOrder {
+				column := layout[key]
+				if column.width <= minimum[key] {
+					continue
+				}
+				column.width--
+				layout[key] = column
+				deficit--
+				shrank = true
+				if deficit == 0 {
+					break
+				}
+			}
+			if !shrank {
+				break
+			}
+		}
+
+		return layout
+	}
+
+	extraWidth := m.width - totalWidth
+	growOrder := []string{"problems", "family", "model"}
+	maximum := map[string]int{
+		"problems": 64,
+		"family":   32,
+		"model":    32,
+	}
+	for extraWidth > 0 {
+		grew := false
+		for _, key := range growOrder {
+			column := layout[key]
+			limit := maximum[key]
+			if column.width >= limit {
+				continue
+			}
+			column.width++
+			layout[key] = column
+			extraWidth--
+			grew = true
+			if extraWidth == 0 {
+				break
+			}
+		}
+		if !grew {
+			break
+		}
+	}
+
+	return layout
+}
+
+func renderTableCell(value string, layout tableColumnLayout) string {
+	value = trunc(value, layout.width)
+	if layout.last {
+		return value
+	}
+
+	return lipgloss.NewStyle().Width(layout.width).Render(value)
+}
+
+func renderStyledTableCell(value string, layout tableColumnLayout) string {
+	if layout.last {
+		return value
+	}
+
+	style := lipgloss.NewStyle().Width(layout.width)
+	if lipgloss.Width(value) >= layout.width {
+		return style.Render(value)
+	}
+
+	return value + strings.Repeat(" ", layout.width-lipgloss.Width(value))
+}
+
+func normalizeTableValue(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "—"
+	}
+
+	return strings.Join(strings.Fields(v), " ")
 }
 
 func (m *Model) renderDetails() string {
