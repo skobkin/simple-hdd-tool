@@ -1,0 +1,74 @@
+when:
+  - event: [push, tag]
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      depth: 0
+
+steps:
+  fmt:
+    image: golang:1.25
+    commands:
+      - |
+        fmt_out=$(gofmt -l ./cmd ./internal 2>/dev/null)
+        if [ -n "$fmt_out" ]; then
+          echo "The following files need gofmt:"
+          echo "$fmt_out"
+          exit 1
+        fi
+
+  lint:
+    image: golangci/golangci-lint:v2.11.3-alpine
+    environment:
+      XDG_CACHE_HOME: /tmp/.cache
+    commands:
+      - golangci-lint run
+
+  vet:
+    image: golang:1.25
+    environment:
+      GOCACHE: /tmp/.gocache
+    commands:
+      - go vet ./...
+
+  test:
+    image: golang:1.25
+    environment:
+      GOCACHE: /tmp/.gocache
+    commands:
+      - go test ./...
+
+  build:
+    image: golang:1.25
+    depends_on:
+      - fmt
+      - lint
+      - vet
+      - test
+    environment:
+      GOCACHE: /tmp/.gocache
+    commands:
+      - CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/skobkin/simple-hdd-tool/internal/buildinfo.Version=dev" -o simple-hdd-tool ./cmd/simple-hdd-tool
+    when:
+      - event: push
+
+  release-forgejo:
+    image: goreleaser/goreleaser-cross:v1.25-v2.12.7
+    depends_on:
+      - fmt
+      - lint
+      - vet
+      - test
+    environment:
+      FORGE_TOKEN:
+        from_secret: FORGE_TOKEN
+    commands:
+      - test -n "$CI_FORGE_URL" || (echo "CI_FORGE_URL is empty. Cannot derive Forge URLs for GoReleaser." && exit 1)
+      - export GITEA_TOKEN="${GITEA_TOKEN:-$FORGE_TOKEN}"
+      - test -n "$FORGE_API_URL" || export FORGE_API_URL="$CI_FORGE_URL/api/v1"
+      - test -n "$FORGE_DOWNLOAD_URL" || export FORGE_DOWNLOAD_URL="$CI_FORGE_URL"
+      - goreleaser release --clean
+    when:
+      - event: tag

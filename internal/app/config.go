@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/skobkin/simple-hdd-tool/internal/buildinfo"
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
-
-// Version is the application version string.
-const Version = "0.1.0"
 
 // Config holds CLI options that control grouping, sorting, and actions.
 type Config struct {
@@ -29,7 +27,7 @@ func ParseConfig(args []string) (Config, error) {
 		SortBy:  domain.SortBySize,
 	}
 
-	fs := flag.NewFlagSet("simple-hdd-tool", flag.ContinueOnError)
+	fs := flag.NewFlagSet(buildinfo.AppName, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var groupBy string
 	var sortBy string
@@ -68,9 +66,9 @@ func ParseConfig(args []string) (Config, error) {
 
 // HelpText returns the CLI usage text.
 func HelpText() string {
-	return `simple-hdd-tool
+	return buildinfo.AppName + `
 
 Usage:
-  simple-hdd-tool [--group-by=model|size|family|none] [--sort-by=size|serial|hours] [--force-remove] [--no-color] [--version]
+  ` + buildinfo.AppName + ` [--group-by=model|size|family|none] [--sort-by=size|serial|hours] [--force-remove] [--no-color] [--version]
 `
 }

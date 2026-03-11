@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/term"
 
 	"github.com/skobkin/simple-hdd-tool/internal/app"
+	"github.com/skobkin/simple-hdd-tool/internal/buildinfo"
 )
 
 func main() {
@@ -27,7 +28,7 @@ func main() {
 	}
 
 	if cfg.ShowVersion {
-		if _, err := fmt.Println(app.Version); err != nil {
+		if _, err := fmt.Println(buildinfo.Version); err != nil {
 			exitWithMessage(1, os.Stderr, err.Error())
 		}
 

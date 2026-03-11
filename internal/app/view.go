@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
+	"github.com/skobkin/simple-hdd-tool/internal/buildinfo"
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 	"github.com/skobkin/simple-hdd-tool/internal/format"
 )
@@ -36,7 +37,7 @@ func (m *Model) View() string {
 
 func (m *Model) renderScan() string {
 	lines := []string{
-		m.styles.header.Render("simple-hdd-tool"),
+		m.styles.header.Render(buildinfo.AppName),
 		"",
 		"Scanning SATA/SAS disks",
 		progressBar(m.scanProgress.Current, m.scanProgress.Total, maxInt(24, m.width-10)),

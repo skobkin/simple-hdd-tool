@@ -86,5 +86,8 @@ ST8000AS0002-1NA17Z (1)
 mkdir -p build && go build -o ./build/simple-hdd-tool ./cmd/simple-hdd-tool
 
 # stripped static build
-mkdir -p build && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o ./build/simple-hdd-tool-static ./cmd/simple-hdd-tool
+mkdir -p build && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -X github.com/skobkin/simple-hdd-tool/internal/buildinfo.Version=dev' -o ./build/simple-hdd-tool-static ./cmd/simple-hdd-tool
+
+# stripped static build with explicit version
+mkdir -p build && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -X github.com/skobkin/simple-hdd-tool/internal/buildinfo.Version=v0.1.0' -o ./build/simple-hdd-tool-static ./cmd/simple-hdd-tool
 ```
