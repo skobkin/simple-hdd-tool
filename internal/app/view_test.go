@@ -26,6 +26,28 @@ func TestRenderDiskRowStaysSingleLine(t *testing.T) {
 	}
 }
 
+func TestRenderDiskRowKeepsHourSuffixVisible(t *testing.T) {
+	m := NewModel(Config{})
+	m.width = 120
+	hours := uint64(6*24*365 + 1*24*30 + 20*24 + 12)
+
+	row := m.renderDiskRow(domain.Disk{
+		Model:      "Model",
+		Family:     "Family",
+		Serial:     "Serial",
+		DevicePath: "/dev/sdb",
+		Problem:    "healthy",
+		SizeBytes:  8001563222016,
+		Smart: domain.SmartInfo{
+			PowerOnHours: &hours,
+		},
+	})
+
+	if !strings.Contains(row, "6y 1m 20d 12h") {
+		t.Fatalf("renderDiskRow truncated hour suffix: %q", row)
+	}
+}
+
 func TestRenderDetailsShowsProblemDetails(t *testing.T) {
 	m := NewModel(Config{})
 	m.mode = viewDetails

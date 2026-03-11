@@ -35,12 +35,21 @@ func SizeBytes(v uint64) string {
 
 // DurationHours formats a SMART power-on-hours value in compact units.
 func DurationHours(hours *uint64) string {
+	return durationHours(hours, 0)
+}
+
+// DurationHoursCompact formats a SMART power-on-hours value to fit a target width.
+func DurationHoursCompact(hours *uint64, width int) string {
+	return durationHours(hours, width)
+}
+
+func durationHours(hours *uint64, width int) string {
 	if hours == nil {
 		return "—"
 	}
 	total := *hours
 	if total < 24 {
-		return fmt.Sprintf("%dh", total)
+		return fitDurationParts([]string{fmt.Sprintf("%dh", total)}, width)
 	}
 	years := total / (24 * 365)
 	total %= 24 * 365
@@ -63,7 +72,24 @@ func DurationHours(hours *uint64) string {
 		parts = append(parts, fmt.Sprintf("%dh", hoursOnly))
 	}
 
-	return strings.Join(parts, " ")
+	return fitDurationParts(parts, width)
+}
+
+func fitDurationParts(parts []string, width int) string {
+	if len(parts) == 0 {
+		return "—"
+	}
+	if width <= 0 {
+		return strings.Join(parts, " ")
+	}
+	for n := len(parts); n > 0; n-- {
+		out := strings.Join(parts[:n], " ")
+		if len(out) <= width {
+			return out
+		}
+	}
+
+	return parts[0]
 }
 
 // RateBytes formats a byte-per-second rate using the same units as SizeBytes.

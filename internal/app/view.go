@@ -80,18 +80,18 @@ func (m *Model) renderTable() string {
 }
 
 func (m *Model) renderColumns() string {
-	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-12s %s",
-		"size", "model", "family", "serial", "block dev", "time", "problems")
+	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %s",
+		"size", "model", "family", "serial", "dev", "time", "problems")
 }
 
 func (m *Model) renderDiskRow(d domain.Disk) string {
-	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-12s %s",
+	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-13s %s",
 		trunc(format.SizeBytes(d.SizeBytes), 9),
 		trunc(d.Model, 18),
 		trunc(d.Family, 10),
 		trunc(d.Serial, 14),
 		trunc(d.DevicePath, 10),
-		trunc(format.DurationHours(d.Smart.PowerOnHours), 12),
+		format.DurationHoursCompact(d.Smart.PowerOnHours, 13),
 		trunc(d.Problem, maxInt(8, m.width-80)),
 	)
 }
