@@ -77,6 +77,7 @@ type Model struct {
 	removeRunner   *removeRunner
 	readLoader     *linux.ReadLoader
 	detailAction   detailAction
+	detailScroll   int
 
 	styles styles
 }
@@ -205,6 +206,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.clampDetailScroll()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case scanProgressMsg:
@@ -291,6 +293,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}, waitRemoveProgress(runner.progress), waitRemoveResult(runner.result))
 		case "n", "esc":
 			m.mode = viewDetails
+			m.clampDetailScroll()
 		}
 
 		return m, nil
@@ -298,6 +301,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc", "q":
 			m.mode = viewTable
+		case "up":
+			m.scrollDetails(-1)
+		case "down":
+			m.scrollDetails(1)
+		case "pgup":
+			m.scrollDetails(-m.detailPageSize())
+		case "pgdown":
+			m.scrollDetails(m.detailPageSize())
+		case "home":
+			m.detailScroll = 0
+		case "end":
+			m.detailScroll = m.maxDetailScroll()
 		case "left", "shift+tab":
 			m.detailAction = (m.detailAction + detailActionCount - 1) % detailActionCount
 		case "right", "tab":
@@ -365,6 +380,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.selectedDisk() != nil {
 			m.detailAction = detailActionClose
+			m.detailScroll = 0
 			m.mode = viewDetails
 		}
 	}
@@ -465,6 +481,51 @@ func (m *Model) rebuildRows() {
 		}
 	}
 	m.restoreSelection(selectedID)
+	m.clampDetailScroll()
+}
+
+func (m *Model) scrollDetails(delta int) {
+	if delta == 0 {
+		return
+	}
+
+	m.detailScroll += delta
+	m.clampDetailScroll()
+}
+
+func (m *Model) detailPageSize() int {
+	height := m.detailBodyHeight()
+	if height < 1 {
+		return 1
+	}
+
+	return height
+}
+
+func (m *Model) clampDetailScroll() {
+	if m.detailScroll < 0 {
+		m.detailScroll = 0
+	}
+
+	maxScroll := m.maxDetailScroll()
+	if m.detailScroll > maxScroll {
+		m.detailScroll = maxScroll
+	}
+}
+
+func (m *Model) maxDetailScroll() int {
+	disk := m.selectedDisk()
+	if disk == nil {
+		return 0
+	}
+
+	bodyLines := m.renderDetailBodyLines(disk)
+	bodyHeight := m.detailBodyHeight()
+	if bodyHeight < 1 || len(bodyLines) <= bodyHeight {
+		return 0
+	}
+
+	return len(bodyLines) - bodyHeight
 }
 
 func (m *Model) restoreSelection(selectedID string) {

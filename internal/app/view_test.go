@@ -158,6 +158,34 @@ func TestRenderDetailsOmitsEmptySmartSection(t *testing.T) {
 	}
 }
 
+func TestRenderDetailsKeepsActionsVisibleWhenBodyOverflows(t *testing.T) {
+	m := NewModel(Config{NoColor: true})
+	m.mode = viewDetails
+	m.width = 48
+	m.height = 10
+	m.disks = []domain.Disk{{
+		ID:             "disk-1",
+		Family:         "Family",
+		Model:          "Model",
+		Serial:         "Serial",
+		DevicePath:     "/dev/sdb",
+		Health:         domain.HealthWarning,
+		Problem:        "health warning",
+		ProblemDetails: "pending sectors=2; SMART error log count=1; this text is intentionally long to force wrapping in a tiny terminal",
+		ProblemNote:    "watch this disk closely and plan replacement",
+	}}
+	m.rebuildRows()
+
+	out := m.renderDetails()
+
+	if !strings.Contains(out, "Close") {
+		t.Fatalf("renderDetails() did not keep action buttons visible:\n%s", out)
+	}
+	if !strings.Contains(out, "Up/Down/PgUp/PgDn scroll") {
+		t.Fatalf("renderDetails() did not render scroll help for overflowing content:\n%s", out)
+	}
+}
+
 func assertSubstringsInOrder(t *testing.T, text string, substrings ...string) {
 	t.Helper()
 
