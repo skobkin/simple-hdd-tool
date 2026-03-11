@@ -50,7 +50,7 @@ steps:
     environment:
       GOCACHE: /tmp/.gocache
     commands:
-      - CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/skobkin/simple-hdd-tool/internal/buildinfo.Version=dev" -o simple-hdd-tool ./cmd/simple-hdd-tool
+      - CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/skobkin/simple-hdd-tool/internal/buildinfo.Version=dev" -o hddtool ./cmd/simple-hdd-tool
     when:
       - event: push
 
