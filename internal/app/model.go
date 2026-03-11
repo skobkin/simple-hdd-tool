@@ -44,8 +44,9 @@ type removeRunner struct {
 }
 
 type row struct {
-	Header string
-	Disk   *domain.Disk
+	Header  string
+	Disk    domain.Disk
+	HasDisk bool
 }
 
 type detailAction int
@@ -307,7 +308,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		if m.selected < len(m.rows)-1 {
 			m.selected++
-			for m.selected < len(m.rows) && m.rows[m.selected].Disk == nil {
+			for m.selected < len(m.rows) && !m.rows[m.selected].HasDisk {
 				m.selected++
 			}
 			if m.selected >= len(m.rows) {
@@ -317,7 +318,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		if m.selected > 0 {
 			m.selected--
-			for m.selected >= 0 && m.rows[m.selected].Disk == nil {
+			for m.selected >= 0 && !m.rows[m.selected].HasDisk {
 				m.selected--
 			}
 			if m.selected < 0 {
@@ -386,22 +387,26 @@ func (m *Model) selectedDisk() *domain.Disk {
 	if m.selected < 0 || m.selected >= len(m.rows) {
 		return nil
 	}
-	return m.rows[m.selected].Disk
+	if !m.rows[m.selected].HasDisk {
+		return nil
+	}
+	return &m.rows[m.selected].Disk
 }
 
 func (m *Model) rebuildRows() {
 	disks := append([]domain.Disk(nil), m.disks...)
 	sortDisks(disks, m.cfg.SortBy)
+	selectedID := ""
+	if disk := m.selectedDisk(); disk != nil {
+		selectedID = disk.ID
+	}
 
 	m.rows = m.rows[:0]
 	if m.cfg.GroupBy == domain.GroupByNone {
 		for i := range disks {
-			d := disks[i]
-			m.rows = append(m.rows, row{Disk: &d})
+			m.rows = append(m.rows, row{Disk: disks[i], HasDisk: true})
 		}
-		if len(m.rows) > 0 && m.rows[m.selected].Disk == nil {
-			m.selected = 0
-		}
+		m.restoreSelection(selectedID)
 		return
 	}
 
@@ -419,16 +424,26 @@ func (m *Model) rebuildRows() {
 		header := fmt.Sprintf("%s (%d)", key, len(grouped[key]))
 		m.rows = append(m.rows, row{Header: header})
 		for i := range grouped[key] {
-			d := grouped[key][i]
-			m.rows = append(m.rows, row{Disk: &d})
+			m.rows = append(m.rows, row{Disk: grouped[key][i], HasDisk: true})
+		}
+	}
+	m.restoreSelection(selectedID)
+}
+
+func (m *Model) restoreSelection(selectedID string) {
+	for idx, row := range m.rows {
+		if row.HasDisk && row.Disk.ID == selectedID {
+			m.selected = idx
+			return
 		}
 	}
 	for idx, row := range m.rows {
-		if row.Disk != nil {
+		if row.HasDisk {
 			m.selected = idx
-			break
+			return
 		}
 	}
+	m.selected = 0
 }
 
 func groupKey(d domain.Disk, mode domain.GroupMode) string {

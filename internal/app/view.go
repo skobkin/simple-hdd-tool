@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 	"github.com/skobkin/simple-hdd-tool/internal/format"
@@ -58,8 +59,8 @@ func (m *Model) renderTable() string {
 	lines = append(lines, m.renderColumns())
 	for idx, row := range m.rows {
 		text := row.Header
-		if row.Disk != nil {
-			text = m.renderDiskRow(*row.Disk)
+		if row.HasDisk {
+			text = m.renderDiskRow(row.Disk)
 		} else {
 			text = m.styles.header.Render(row.Header)
 		}
@@ -210,7 +211,22 @@ func trunc(v string, width int) string {
 	if width <= 1 {
 		return ""
 	}
-	return lipgloss.NewStyle().MaxWidth(width).Render(v)
+	v = strings.Join(strings.Fields(v), " ")
+	if runewidth.StringWidth(v) <= width {
+		return v
+	}
+
+	var b strings.Builder
+	currentWidth := 0
+	for _, r := range v {
+		rw := runewidth.RuneWidth(r)
+		if currentWidth+rw > width {
+			break
+		}
+		b.WriteRune(r)
+		currentWidth += rw
+	}
+	return b.String()
 }
 
 func max(a, b int) int {
