@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 	"github.com/skobkin/simple-hdd-tool/internal/format"
@@ -62,11 +62,12 @@ const (
 
 // Model owns the Bubble Tea application state.
 type Model struct {
-	cfg      Config
-	width    int
-	height   int
-	mode     viewMode
-	infoText string
+	cfg       Config
+	width     int
+	height    int
+	mode      viewMode
+	infoText  string
+	altScreen bool
 
 	disks    []domain.Disk
 	rows     []row
@@ -106,6 +107,11 @@ func NewModel(cfg Config) *Model {
 		mode:   viewScanning,
 		styles: newStyles(cfg.NoColor),
 	}
+}
+
+// SetAltScreen configures whether the app should render in the terminal alternate screen.
+func (m *Model) SetAltScreen(enabled bool) {
+	m.altScreen = enabled
 }
 
 func newStyles(noColor bool) styles {
@@ -209,7 +215,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clampDetailScroll()
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	case scanProgressMsg:
 		m.scanProgress = domain.ScanProgress(msg)

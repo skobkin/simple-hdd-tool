@@ -3,10 +3,14 @@ package app
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 )
+
+func keyPress(code rune, text string, mod tea.KeyMod) tea.KeyPressMsg {
+	return tea.KeyPressMsg(tea.Key{Code: code, Text: text, Mod: mod})
+}
 
 func TestRebuildRowsKeepsSelectedDiskWhenGroupingChanges(t *testing.T) {
 	m := NewModel(Config{
@@ -58,27 +62,27 @@ func TestDetailsScrollClampsAndPages(t *testing.T) {
 		t.Fatalf("expected overflowing details body, got max scroll %d", maxScroll)
 	}
 
-	m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	m.handleKey(keyPress(tea.KeyDown, "", 0))
 	if m.detailScroll != 1 {
 		t.Fatalf("unexpected detail scroll after down: got %d want 1", m.detailScroll)
 	}
 
-	m.handleKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	m.handleKey(keyPress(tea.KeyPgDown, "", 0))
 	if m.detailScroll <= 1 {
 		t.Fatalf("expected page down to advance scroll, got %d", m.detailScroll)
 	}
 
-	m.handleKey(tea.KeyMsg{Type: tea.KeyEnd})
+	m.handleKey(keyPress(tea.KeyEnd, "", 0))
 	if m.detailScroll != maxScroll {
 		t.Fatalf("unexpected detail scroll after end: got %d want %d", m.detailScroll, maxScroll)
 	}
 
-	m.handleKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	m.handleKey(keyPress(tea.KeyPgDown, "", 0))
 	if m.detailScroll != maxScroll {
 		t.Fatalf("detail scroll exceeded max: got %d want %d", m.detailScroll, maxScroll)
 	}
 
-	m.handleKey(tea.KeyMsg{Type: tea.KeyHome})
+	m.handleKey(keyPress(tea.KeyHome, "", 0))
 	if m.detailScroll != 0 {
 		t.Fatalf("unexpected detail scroll after home: got %d want 0", m.detailScroll)
 	}
@@ -95,7 +99,7 @@ func TestEnteringDetailsResetsScroll(t *testing.T) {
 	}}
 	m.rebuildRows()
 
-	model, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ := m.handleKey(keyPress(tea.KeyEnter, "", 0))
 	got := model.(*Model)
 
 	if got.mode != viewDetails {

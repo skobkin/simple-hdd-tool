@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 	"github.com/skobkin/simple-hdd-tool/internal/linux"
@@ -45,28 +45,28 @@ func TestViewDispatchAndTableNavigation(t *testing.T) {
 	}
 	m.rebuildRows()
 
-	if got := m.View(); !strings.Contains(got, "Scanning SATA/SAS disks") {
+	if got := m.View().Content; !strings.Contains(got, "Scanning SATA/SAS disks") {
 		t.Fatalf("View() scanning = %q", got)
 	}
 
 	m.mode = viewTable
-	if got := m.View(); !strings.Contains(got, "disks found") {
+	if got := m.View().Content; !strings.Contains(got, "disks found") {
 		t.Fatalf("View() table = %q", got)
 	}
 
-	model, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	model, _ := m.handleKey(keyPress(tea.KeyDown, "", 0))
 	m = model.(*Model)
 	if disk := m.selectedDisk(); disk == nil || disk.ID != "a" {
 		t.Fatalf("selectedDisk() = %+v, want a", disk)
 	}
 
-	model, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	model, _ = m.handleKey(keyPress('g', "g", 0))
 	m = model.(*Model)
 	if m.cfg.GroupBy != domain.GroupByModel {
 		t.Fatalf("GroupBy = %q, want %q", m.cfg.GroupBy, domain.GroupByModel)
 	}
 
-	model, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	model, _ = m.handleKey(keyPress('s', "s", 0))
 	m = model.(*Model)
 	if m.cfg.SortBy != domain.SortBySerial {
 		t.Fatalf("SortBy = %q, want %q", m.cfg.SortBy, domain.SortBySerial)
@@ -138,7 +138,7 @@ func TestHandleKeyInfoAndDetailsBranches(t *testing.T) {
 	m := NewModel(Config{NoColor: true, GroupBy: domain.GroupByNone, SortBy: domain.SortBySize})
 	m.mode = viewInfo
 	m.infoText = "status"
-	model, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ := m.handleKey(keyPress(tea.KeyEnter, "", 0))
 	m = model.(*Model)
 	if m.mode != viewTable || m.infoText != "" {
 		t.Fatalf("info dismiss state: mode=%v info=%q", m.mode, m.infoText)
@@ -147,17 +147,17 @@ func TestHandleKeyInfoAndDetailsBranches(t *testing.T) {
 	m.mode = viewDetails
 	m.disks = []domain.Disk{{ID: "a", Model: "Model", DevicePath: "/dev/sda"}}
 	m.rebuildRows()
-	model, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	model, _ = m.handleKey(keyPress(tea.KeyTab, "", 0))
 	m = model.(*Model)
 	if m.detailAction != detailActionReadLoad {
 		t.Fatalf("detailAction = %v, want read load", m.detailAction)
 	}
-	model, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	model, _ = m.handleKey(keyPress(tea.KeyTab, "", tea.ModShift))
 	m = model.(*Model)
 	if m.detailAction != detailActionClose {
 		t.Fatalf("detailAction = %v, want close", m.detailAction)
 	}
-	model, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	model, _ = m.handleKey(keyPress(tea.KeyEsc, "", 0))
 	m = model.(*Model)
 	if m.mode != viewTable {
 		t.Fatalf("mode = %v, want table", m.mode)

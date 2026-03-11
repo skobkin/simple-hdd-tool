@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/skobkin/simple-hdd-tool/internal/buildinfo"
@@ -13,7 +14,14 @@ import (
 )
 
 // View renders the current Bubble Tea screen.
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
+	view := tea.NewView(m.viewContent())
+	view.AltScreen = m.altScreen
+
+	return view
+}
+
+func (m *Model) viewContent() string {
 	switch m.mode {
 	case viewScanning:
 		return m.renderScan()

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 	"github.com/skobkin/simple-hdd-tool/internal/linux"
 )
@@ -70,9 +72,10 @@ func TestRenderDetailsShowsProblemDetails(t *testing.T) {
 	m.rebuildRows()
 
 	out := m.renderDetails()
+	plain := ansi.Strip(out)
 
-	assertSubstringsInOrder(t, out, "Identity", "Health", "smartctl health: passed", "App diagnosis: warning", "Problem details: pending sectors=2; SMART error log count=1")
-	if !strings.Contains(out, "Problem details: pending sectors=2; SMART error log count=1") {
+	assertSubstringsInOrder(t, plain, "Identity", "Health", "smartctl health: passed", "App diagnosis: warning", "Problem details: pending sectors=2; SMART error log count=1")
+	if !strings.Contains(plain, "Problem details: pending sectors=2; SMART error log count=1") {
 		t.Fatalf("renderDetails() did not include problem details:\n%s", out)
 	}
 }
@@ -98,12 +101,13 @@ func TestRenderDetailsShowsRemovalObstacleSeparately(t *testing.T) {
 	m.rebuildRows()
 
 	out := m.renderDetails()
+	plain := ansi.Strip(out)
 
-	assertSubstringsInOrder(t, out, "Health", "smartctl health: passed", "App diagnosis: healthy", "Problem: —", "SMART", "Temperature: 31 C", "Removal / Usage", "Removal obstacle: mounted; swap active")
-	if !strings.Contains(out, "Removal obstacle: mounted; swap active") {
+	assertSubstringsInOrder(t, plain, "Health", "smartctl health: passed", "App diagnosis: healthy", "Problem: —", "SMART", "Temperature: 31 C", "Removal / Usage", "Removal obstacle: mounted; swap active")
+	if !strings.Contains(plain, "Removal obstacle: mounted; swap active") {
 		t.Fatalf("renderDetails() did not include removal obstacle:\n%s", out)
 	}
-	if strings.Contains(out, "Problem: mounted") {
+	if strings.Contains(plain, "Problem: mounted") {
 		t.Fatalf("renderDetails() rendered removal obstacle as problem:\n%s", out)
 	}
 }

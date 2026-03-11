@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
 
 	"github.com/skobkin/simple-hdd-tool/internal/app"
@@ -41,15 +41,15 @@ func main() {
 		exitWithMessage(1, os.Stderr, "interactive terminal required: no TTY attached to stdin or stdout")
 	}
 
+	model := app.NewModel(cfg)
+	model.SetAltScreen(stdoutIsTTY)
+
 	opts := []tea.ProgramOption{
 		tea.WithInput(os.Stdin),
 		tea.WithOutput(os.Stdout),
 	}
-	if stdoutIsTTY {
-		opts = append(opts, tea.WithAltScreen())
-	}
 
-	p := tea.NewProgram(app.NewModel(cfg), opts...)
+	p := tea.NewProgram(model, opts...)
 	if _, err := p.Run(); err != nil {
 		exitWithMessage(1, os.Stderr, err.Error())
 	}
