@@ -1,4 +1,4 @@
-# Simple HDD tool
+# Simple HDD tool [![status-badge](https://ci.skobk.in/api/badges/8/status.svg?events=push%2Ctag)](https://ci.skobk.in/repos/8) [![latest release](https://git.skobk.in/skobkin/simple-hdd-tool/badges/release.svg)](https://git.skobk.in/skobkin/simple-hdd-tool/releases)
 
 Interactive terminal UI for inspecting Linux SATA/SAS disks, checking SMART-derived health signals, generating sustained read load to identify the physical drive by its activity LED, and removing devices from the kernel after safety checks.
 
