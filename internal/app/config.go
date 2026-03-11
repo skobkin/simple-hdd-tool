@@ -41,7 +41,7 @@ func ParseConfig(args []string) (Config, error) {
 	}
 
 	switch domain.GroupMode(groupBy) {
-	case domain.GroupByModel, domain.GroupBySize, domain.GroupByVendor, domain.GroupByNone:
+	case domain.GroupByModel, domain.GroupBySize, domain.GroupByFamily, domain.GroupByNone:
 		cfg.GroupBy = domain.GroupMode(groupBy)
 	default:
 		return cfg, fmt.Errorf("invalid --group-by value %q", groupBy)
@@ -66,6 +66,6 @@ func HelpText() string {
 	return `simple-hdd-tool
 
 Usage:
-  simple-hdd-tool [--group-by=model|size|vendor|none] [--sort-by=size|serial|hours] [--force-remove] [--no-color] [--version]
+  simple-hdd-tool [--group-by=model|size|family|none] [--sort-by=size|serial|hours] [--force-remove] [--no-color] [--version]
 `
 }

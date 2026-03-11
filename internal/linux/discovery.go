@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -97,7 +98,7 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 		Name:       name,
 		DevicePath: devicePath,
 		SysfsPath:  sysfsPath,
-		Vendor:     dashIfEmpty(strings.TrimSpace(readText(filepath.Join(sysfsPath, "device/vendor")))),
+		Family:     "-",
 		Model:      dashIfEmpty(strings.TrimSpace(readText(filepath.Join(sysfsPath, "device/model")))),
 		Serial:     dashIfEmpty(strings.TrimSpace(readText(filepath.Join(sysfsPath, "device/serial")))),
 		SizeBytes:  sizeBytes,
@@ -127,8 +128,8 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 	smartInfo, ident, err := scanSMART(ctx, devicePath, timeout)
 	if err == nil {
 		disk.Smart = smartInfo
-		if ident.Vendor != "" {
-			disk.Vendor = ident.Vendor
+		if ident.Family != "" {
+			disk.Family = ident.Family
 		}
 		if ident.Model != "" {
 			disk.Model = ident.Model
@@ -143,6 +144,11 @@ func (s Scanner) scanDisk(ctx context.Context, name string, usage UsageInfo) dom
 	} else {
 		disk.Smart.ReadError = err.Error()
 		disk.Warnings = append(disk.Warnings, "SMART read failed: "+err.Error())
+	}
+	if family, err := scanSmartctlFamily(ctx, devicePath, timeout); err == nil && family != "" {
+		disk.Family = family
+	} else if err != nil {
+		disk.Warnings = append(disk.Warnings, "smartctl info read failed: "+err.Error())
 	}
 
 	disk.Health, disk.Problem, disk.ProblemNote = classifyProblem(disk)
@@ -208,10 +214,51 @@ func detectTransport(name string) string {
 }
 
 type identity struct {
-	Vendor    string
+	Family    string
 	Model     string
 	Serial    string
 	SizeBytes uint64
+}
+
+func scanSmartctlFamily(ctx context.Context, devicePath string, timeout time.Duration) (string, error) {
+	if _, err := exec.LookPath("smartctl"); err != nil {
+		return "", nil
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "smartctl", "-i", devicePath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			// smartctl returns bitmask exit codes for health and capability states.
+			// The information section may still be valid, so keep parsing output.
+		} else if cmdCtx.Err() != nil {
+			return "", cmdCtx.Err()
+		} else {
+			return "", err
+		}
+	}
+
+	return parseSmartctlFamily(output), nil
+}
+
+func parseSmartctlFamily(output []byte) string {
+	for _, line := range strings.Split(string(output), "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(key) != "Model Family" {
+			continue
+		}
+		family := strings.Join(strings.Fields(value), " ")
+		return family
+	}
+
+	return ""
 }
 
 func scanSMART(ctx context.Context, devicePath string, timeout time.Duration) (domain.SmartInfo, identity, error) {
@@ -270,7 +317,7 @@ func scanSMARTSync(devicePath string) (domain.SmartInfo, identity, error) {
 	case *smart.ScsiDevice:
 		inquiry, err := d.Inquiry()
 		if err == nil {
-			id.Vendor = strings.TrimSpace(string(bytes.TrimSpace(inquiry.VendorIdent[:])))
+			id.Family = strings.TrimSpace(string(bytes.TrimSpace(inquiry.VendorIdent[:])))
 			id.Model = strings.TrimSpace(string(bytes.TrimSpace(inquiry.ProductIdent[:])))
 		}
 		serial, err := d.SerialNumber()

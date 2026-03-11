@@ -17,3 +17,9 @@ func TestParseConfig(t *testing.T) {
 		t.Fatalf("expected force-remove")
 	}
 }
+
+func TestParseConfigRejectsInvalidGroupBy(t *testing.T) {
+	if _, err := ParseConfig([]string{"--group-by=bogus"}); err == nil {
+		t.Fatalf("expected invalid group-by error")
+	}
+}

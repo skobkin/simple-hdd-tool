@@ -435,8 +435,8 @@ func groupKey(d domain.Disk, mode domain.GroupMode) string {
 	switch mode {
 	case domain.GroupBySize:
 		return format.SizeBytes(d.SizeBytes)
-	case domain.GroupByVendor:
-		return fallback(d.Vendor)
+	case domain.GroupByFamily:
+		return fallback(d.Family)
 	default:
 		return fallback(d.Model)
 	}

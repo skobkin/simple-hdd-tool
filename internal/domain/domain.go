@@ -7,7 +7,7 @@ type GroupMode string
 const (
 	GroupByModel  GroupMode = "model"
 	GroupBySize   GroupMode = "size"
-	GroupByVendor GroupMode = "vendor"
+	GroupByFamily GroupMode = "family"
 	GroupByNone   GroupMode = "none"
 )
 
@@ -16,8 +16,8 @@ func (m GroupMode) Next() GroupMode {
 	case GroupByModel:
 		return GroupBySize
 	case GroupBySize:
-		return GroupByVendor
-	case GroupByVendor:
+		return GroupByFamily
+	case GroupByFamily:
 		return GroupByNone
 	default:
 		return GroupByModel
@@ -84,7 +84,7 @@ type Disk struct {
 	Name        string
 	DevicePath  string
 	SysfsPath   string
-	Vendor      string
+	Family      string
 	Model       string
 	Serial      string
 	SizeBytes   uint64

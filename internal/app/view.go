@@ -76,14 +76,14 @@ func (m *Model) renderTable() string {
 
 func (m *Model) renderColumns() string {
 	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-12s %s",
-		"size", "model", "vendor", "serial", "block dev", "time", "problems")
+		"size", "model", "family", "serial", "block dev", "time", "problems")
 }
 
 func (m *Model) renderDiskRow(d domain.Disk) string {
 	return fmt.Sprintf("%-9s %-18s %-10s %-14s %-10s %-12s %s",
 		trunc(format.SizeBytes(d.SizeBytes), 9),
 		trunc(d.Model, 18),
-		trunc(d.Vendor, 10),
+		trunc(d.Family, 10),
 		trunc(d.Serial, 14),
 		trunc(d.DevicePath, 10),
 		trunc(format.DurationHours(d.Smart.PowerOnHours), 12),
@@ -108,7 +108,7 @@ func (m *Model) renderDetails() string {
 	lines := []string{
 		m.styles.header.Render("Disk Details"),
 		"",
-		"Vendor: " + disk.Vendor,
+		"Family: " + disk.Family,
 		"Model: " + disk.Model,
 		"Size: " + format.SizeBytes(disk.SizeBytes),
 		"Serial: " + disk.Serial,
@@ -188,9 +188,6 @@ func (m *Model) renderDetailButton(action detailAction, label string, enabled bo
 	}
 	if m.detailAction == action {
 		style = m.styles.focused
-		if danger && enabled {
-			style = style.BorderForeground(lipgloss.Color("9"))
-		}
 	}
 	return style.Render(label)
 }
