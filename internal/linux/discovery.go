@@ -284,12 +284,16 @@ func scanSmartctlInfo(ctx context.Context, devicePath string, timeout time.Durat
 
 	cmd := commandContext(cmdCtx, "smartctl", mode, devicePath) // #nosec G204 -- devicePath is restricted to discovered /dev/sdX block devices
 	output, err := cmd.CombinedOutput()
+	overallHealth := parseSmartctlHealth(output)
 	if err != nil {
 		var exitErr *exec.ExitError
 		switch {
 		case errors.As(err, &exitErr):
 			// smartctl returns bitmask exit codes for health and capability states.
 			// The information section may still be valid, so keep parsing output.
+			if exitErr.ExitCode() >= 0 && exitErr.ExitCode()&(1<<3) != 0 {
+				overallHealth = domain.SmartctlHealthFailed
+			}
 		case cmdCtx.Err() != nil:
 			return smartctlInfo{}, cmdCtx.Err()
 		default:
@@ -299,7 +303,7 @@ func scanSmartctlInfo(ctx context.Context, devicePath string, timeout time.Durat
 
 	return smartctlInfo{
 		Family:        parseSmartctlFamily(output),
-		OverallHealth: parseSmartctlHealth(output),
+		OverallHealth: overallHealth,
 	}, nil
 }
 
@@ -322,17 +326,26 @@ func parseSmartctlFamily(output []byte) string {
 
 func parseSmartctlHealth(output []byte) domain.SmartctlHealth {
 	for _, line := range strings.Split(string(output), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.Contains(trimmed, "SMART overall-health self-assessment test result:") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if !ok {
 			continue
 		}
-		switch {
-		case strings.HasSuffix(trimmed, "PASSED"):
-			return domain.SmartctlHealthPassed
-		case strings.HasSuffix(trimmed, "FAILED"):
-			return domain.SmartctlHealthFailed
-		default:
-			return domain.SmartctlHealthUnknown
+		fields := strings.Fields(value)
+		if len(fields) == 0 {
+			continue
+		}
+		switch key {
+		case "SMART overall-health self-assessment test result":
+			switch fields[0] {
+			case "PASSED":
+				return domain.SmartctlHealthPassed
+			case "FAILED", "FAILED!":
+				return domain.SmartctlHealthFailed
+			}
+		case "SMART Health Status":
+			if strings.TrimSpace(value) == "OK" {
+				return domain.SmartctlHealthPassed
+			}
 		}
 	}
 
@@ -469,15 +482,15 @@ func fillAtaSMART(info *domain.SmartInfo, page *smart.AtaSmartPage) {
 }
 
 func classifyProblem(d domain.Disk) (domain.Health, string, string, string) {
+	if d.Smart.OverallHealth == domain.SmartctlHealthFailed {
+		return domain.HealthFailing, "SMART health failed", smartProblemDetails(d.Smart), problemNote(d.Smart, "smartctl reports failing SMART health")
+	}
 	if d.Smart.ReadError != "" {
 		return domain.HealthWarning, "SMART read failure", d.Smart.ReadError, d.Smart.ReadError
 	}
 
-	if severeCount(d.Smart.ReallocatedSectors) || severeCount(d.Smart.PendingSectors) || severeCount(d.Smart.UncorrectableErrors) {
-		return domain.HealthFailing, "disk failure", smartProblemDetails(d.Smart), problemNote(d.Smart, "critical SMART counters are non-zero")
-	}
 	if warnedCount(d.Smart.ReallocatedSectors) || warnedCount(d.Smart.PendingSectors) || warnedCount(d.Smart.UncorrectableErrors) {
-		return domain.HealthWarning, "health warning", smartProblemDetails(d.Smart), problemNote(d.Smart, "SMART counters indicate potential media issues")
+		return domain.HealthWarning, "health warning", smartProblemDetails(d.Smart), problemNote(d.Smart, "SMART counters indicate wear or potential media issues")
 	}
 	if d.Usage.ChecksPartial {
 		return domain.HealthWarning, "unknown", "usage verification incomplete", "could not fully verify device usage"
@@ -487,10 +500,6 @@ func classifyProblem(d domain.Disk) (domain.Health, string, string, string) {
 	}
 
 	return domain.HealthUnknown, "unknown", "", ""
-}
-
-func severeCount(v *uint64) bool {
-	return v != nil && *v > 0
 }
 
 func warnedCount(v *uint64) bool {
@@ -505,9 +514,9 @@ func problemNote(info domain.SmartInfo, base string) string {
 	if info.ErrorCount != nil && *info.ErrorCount > 0 {
 		notes = append(notes, "SMART error log contains historical entries")
 	}
-	if info.OverallHealth == domain.SmartctlHealthPassed &&
+	if info.OverallHealth != domain.SmartctlHealthFailed &&
 		(warnedCount(info.ReallocatedSectors) || warnedCount(info.PendingSectors) || warnedCount(info.UncorrectableErrors)) {
-		notes = append(notes, "app diagnosis is stricter than smartctl overall-health")
+		notes = append(notes, "non-zero counters alone do not establish SMART failure")
 	}
 
 	return strings.Join(notes, "; ")

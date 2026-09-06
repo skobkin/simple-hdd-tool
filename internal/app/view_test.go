@@ -175,14 +175,14 @@ func TestRenderDiskRowPadsHealthColumnBeforeProblems(t *testing.T) {
 		Family:     "Family",
 		Serial:     "Serial",
 		DevicePath: "/dev/sdb",
-		Problem:    "disk failure",
+		Problem:    "SMART health failed",
 		SizeBytes:  8001563222016,
 		Smart: domain.SmartInfo{
-			OverallHealth: domain.SmartctlHealthPassed,
+			OverallHealth: domain.SmartctlHealthFailed,
 		},
 	}))
 
-	if !regexp.MustCompile(`●\s{2,}disk failure`).MatchString(row) {
+	if !regexp.MustCompile(`✕\s{2,}SMART health failed`).MatchString(row) {
 		t.Fatalf("renderDiskRow() did not pad the health column before problems:\n%s", row)
 	}
 }

@@ -3,6 +3,7 @@ package linux
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -218,6 +219,28 @@ func TestScanSmartctlInfoExecBranches(t *testing.T) {
 			t.Fatalf("scanSmartctlInfo() = %+v", got)
 		}
 	})
+	for _, code := range []int{0, 1, 2, 4, 8, 12, 16, 32, 64, 128, 255} {
+		for _, output := range []string{"", "SMART Health Status: OK"} {
+			t.Run(fmt.Sprintf("exit %d output %q", code, output), func(t *testing.T) {
+				commandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+					// #nosec G204 -- output and exit code are fixed test fixtures passed as positional arguments.
+					return exec.CommandContext(ctx, "sh", "-c", `printf '%s\n' "$1"; exit "$2"`, "sh", output, fmt.Sprint(code))
+				}
+				got, err := scanSmartctlInfo(context.Background(), "/dev/sda", time.Second, "-H")
+				want := domain.SmartctlHealthUnknown
+				if output != "" {
+					want = domain.SmartctlHealthPassed
+				}
+				if code&(1<<3) != 0 {
+					want = domain.SmartctlHealthFailed
+				}
+				if err != nil || got.OverallHealth != want {
+					t.Fatalf("scanSmartctlInfo() = %+v, %v; want %q", got, err, want)
+				}
+			})
+		}
+	}
+
 }
 
 func TestScanSMARTReturnsContextAndTimeoutErrors(t *testing.T) {

@@ -33,9 +33,9 @@ ST8000AS0002-1NA17Z (1)
 │ App diagnosis: warning                               │
 │ Problem: health warning                              │
 │ Problem details: pending sectors=2                   │
-│ Note: SMART counters indicate potential media issues │
-│ Note: app diagnosis is stricter than smartctl overal │
-│ l-health                                             │
+│ Note: SMART counters indicate wear or potential      │
+│ media issues; non-zero counters alone do not          │
+│ establish SMART failure                              │
 │                                                      │
 │ SMART                                                │
 │ Temperature: 29 C                                    │
@@ -70,7 +70,8 @@ ST8000AS0002-1NA17Z (1)
 - Scans `/sys/block` for supported `/dev/sdX` disks and skips USB/unsupported transports.
 - Reads disk identity, capacity, uptime, temperature, and selected SMART counters.
 - Shows `smartctl` overall SMART pass/fail separately from the app's own diagnosis.
-- Classifies disks as `healthy`, `warning`, `failing`, or `unknown`.
+- Classifies disks as `healthy`, `warning`, `failing`, or `unknown`. Only a SMART health failure reported by `smartctl` produces `failing` (`SMART health failed`). Nonzero reallocated, pending, or uncorrectable counters produce `health warning`, regardless of their raw magnitude; their values remain visible in details. Historical SMART error-log entries alone are informational.
+- When `smartctl` is unavailable, its health status remains `unknown`; counter warnings still work without inventing failure thresholds.
 - Highlights risky states such as mounted disks, active swap, mdraid holders, and device-mapper holders.
 - Groups the disk list by model, size, family, or not at all.
 - Sorts disks by size, serial number, or SMART power-on hours.

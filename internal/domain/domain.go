@@ -62,7 +62,7 @@ const (
 	HealthHealthy Health = "healthy"
 	// HealthWarning marks a disk with usage or SMART warnings.
 	HealthWarning Health = "warning"
-	// HealthFailing marks a disk with failing SMART indicators.
+	// HealthFailing marks a disk whose SMART health smartctl reports as failing.
 	HealthFailing Health = "failing"
 	// HealthUnknown marks a disk whose health could not be determined.
 	HealthUnknown Health = "unknown"
