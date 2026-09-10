@@ -146,6 +146,7 @@ func TestInitStartsUpdateCheckForReleaseBuilds(t *testing.T) {
 func TestManualCheckResultOpensModal(t *testing.T) {
 	stub := &stubUpdateChecker{result: availableUpdateInfo()}
 	m := newUpdatesTestModel(t, stub)
+	m.mode = viewTable
 
 	m.Update(updateCheckDoneMsg{result: stub.result, manual: true})
 
@@ -167,11 +168,63 @@ func TestManualCheckResultOpensModal(t *testing.T) {
 func TestManualCheckErrorShowsModal(t *testing.T) {
 	stub := &stubUpdateChecker{err: errors.New("offline")}
 	m := newUpdatesTestModel(t, stub)
+	m.mode = viewTable
 
 	m.Update(updateCheckDoneMsg{err: stub.err, manual: true})
 
 	if m.mode != viewUpdates {
 		t.Fatalf("mode = %v, want viewUpdates", m.mode)
+	}
+	if view := ansi.Strip(m.renderUpdates()); !strings.Contains(view, "Update check failed: offline") {
+		t.Errorf("update modal = %q, want the failure notice", view)
+	}
+}
+
+func TestManualCheckResultDefersDuringOperation(t *testing.T) {
+	stub := &stubUpdateChecker{result: availableUpdateInfo()}
+	m := newUpdatesTestModel(t, stub)
+	m.mode = viewReadLoad
+
+	m.Update(updateCheckDoneMsg{result: stub.result, manual: true})
+
+	if m.mode != viewReadLoad {
+		t.Fatalf("mode = %v, want viewReadLoad while the loader runs", m.mode)
+	}
+	if !m.pendingUpdates {
+		t.Error("expected the result to be deferred until the disk list is shown")
+	}
+
+	m.mode = viewDetails
+	m.handleKey(keyPress(tea.KeyEscape, "", 0))
+
+	if m.mode != viewUpdates {
+		t.Fatalf("mode = %v, want viewUpdates after returning to the disk list", m.mode)
+	}
+	if m.pendingUpdates {
+		t.Error("expected the deferral flag to clear once shown")
+	}
+	if view := ansi.Strip(m.renderUpdates()); !strings.Contains(view, "0.9.0") {
+		t.Errorf("update modal = %q, want the deferred result", view)
+	}
+}
+
+func TestManualCheckErrorDefersDuringOperation(t *testing.T) {
+	stub := &stubUpdateChecker{err: errors.New("offline")}
+	m := newUpdatesTestModel(t, stub)
+	m.mode = viewRemoving
+
+	m.Update(updateCheckDoneMsg{err: stub.err, manual: true})
+
+	if m.mode != viewRemoving {
+		t.Fatalf("mode = %v, want viewRemoving while removal runs", m.mode)
+	}
+
+	m.mode = viewInfo
+	m.infoText = "Disk removed"
+	m.handleKey(keyPress(tea.KeyEnter, "", 0))
+
+	if m.mode != viewUpdates {
+		t.Fatalf("mode = %v, want viewUpdates after closing the status view", m.mode)
 	}
 	if view := ansi.Strip(m.renderUpdates()); !strings.Contains(view, "Update check failed: offline") {
 		t.Errorf("update modal = %q, want the failure notice", view)

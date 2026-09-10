@@ -108,6 +108,7 @@ type Model struct {
 	updateChecking bool
 	updateResult   *updates.Info
 	updateErr      error
+	pendingUpdates bool
 
 	styles styles
 }
@@ -198,6 +199,34 @@ func autoUpdateEnabled(cfg Config, version string) bool {
 	}
 
 	return !cfg.NoUpdateCheck
+}
+
+// showUpdateModal presents a completed manual check. It opens immediately from
+// the disk list; while another view is active (scan, details, read load,
+// removal) the result is deferred until the disk list is shown again, so the
+// modal never interrupts a running operation.
+func (m *Model) showUpdateModal() {
+	if m.mode != viewTable && m.mode != viewUpdates {
+		m.pendingUpdates = true
+
+		return
+	}
+	m.mode = viewUpdates
+}
+
+// returnToTable leaves the current view for the disk list, presenting any
+// update result that was deferred while another operation was active.
+func (m *Model) returnToTable() {
+	m.mode = viewTable
+	m.flushPendingUpdateModal()
+}
+
+func (m *Model) flushPendingUpdateModal() {
+	if !m.pendingUpdates {
+		return
+	}
+	m.pendingUpdates = false
+	m.showUpdateModal()
 }
 
 // startUpdateCheck issues one update check; manual marks a user-requested
@@ -295,6 +324,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.disks = res.Disks
 		m.rebuildRows()
+		m.flushPendingUpdateModal()
 	case removeProgressMsg:
 		m.removeProgress = domain.RemovalProgress(msg).Step
 
@@ -330,7 +360,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			if msg.manual {
 				m.updateErr = msg.err
-				m.mode = viewUpdates
+				m.showUpdateModal()
 			}
 
 			return m, nil
@@ -338,7 +368,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		result := msg.result
 		m.updateResult = &result
 		if msg.manual {
-			m.mode = viewUpdates
+			m.showUpdateModal()
 		}
 	}
 
@@ -356,7 +386,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case viewInfo:
 		if msg.String() == "enter" || msg.String() == "esc" || msg.String() == "q" {
-			m.mode = viewTable
+			m.returnToTable()
 			m.infoText = ""
 		}
 
@@ -387,7 +417,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case viewDetails:
 		switch msg.String() {
 		case "esc", "q":
-			m.mode = viewTable
+			m.returnToTable()
 		case "up":
 			m.scrollDetails(-1)
 		case "down":
@@ -430,7 +460,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case viewUpdates:
 		if msg.String() == "enter" || msg.String() == "esc" || msg.String() == "q" {
-			m.mode = viewTable
+			m.returnToTable()
 			m.updateErr = nil
 		}
 
@@ -494,14 +524,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) runDetailAction() (tea.Model, tea.Cmd) {
 	disk := m.selectedDisk()
 	if disk == nil {
-		m.mode = viewTable
+		m.returnToTable()
 
 		return m, nil
 	}
 
 	switch m.detailAction {
 	case detailActionClose:
-		m.mode = viewTable
+		m.returnToTable()
 
 		return m, nil
 	case detailActionReadLoad:
