@@ -5,6 +5,7 @@
 
 - `internal/app`: Bubble Tea application state, config, and views.
 - `internal/linux`: Linux-specific disk discovery, `/proc` parsing, read-load, and device removal.
+- `internal/updates`: Forgejo release checking via `go4updates`, shaped for the UI.
 - `internal/domain`: shared domain types and health logic.
 - `internal/format`: formatting helpers for sizes, durations, and display values.
 - `internal/buildinfo`: version injection for release builds.

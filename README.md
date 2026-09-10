@@ -7,7 +7,8 @@ Interactive terminal UI for inspecting Linux SATA/SAS disks, checking SMART-deri
 ### Disk list
 ```
 2 disks found
-g Group:model  s Sort:size  r Refresh  Enter Details  q Quit  Ctrl+C Quit
+Update available: 0.4.0 (current 0.3.1)  u Details
+g Group:model  s Sort:size  r Refresh  u Updates  Enter Details  q Quit  Ctrl+C Quit
 
 size      model              family     serial         block dev  time         health problems
 HGST HUS728T8TALE6L4 (1)
@@ -78,8 +79,9 @@ ST8000AS0002-1NA17Z (1)
 - Shows per-disk details, including SMART counter breakdown and safety notes.
 - Can generate continuous read load on a selected disk, mainly to help locate its tray in a server by watching the activity LED.
 - Can request kernel-side device removal through sysfs.
+- Checks Forgejo releases for a newer version: once at startup and on demand with `u`, showing the changelog and download location when an update is available.
 - Falls back to read-only mode when write-required operations are unavailable.
-- Supports `--group-by`, `--sort-by`, `--force-remove`, `--no-color`, `--help`, and `--version`.
+- Supports `--group-by`, `--sort-by`, `--force-remove`, `--no-color`, `--no-update-check`, `--help`, and `--version`.
 
 ## Notes
 
@@ -87,6 +89,7 @@ ST8000AS0002-1NA17Z (1)
 - The scan targets `/dev/sdX` block devices. NVMe, loop, and USB disks are not part of the current scope.
 - Running as root is required for full functionality. Without it, read-load and remove actions are unavailable.
 - `smartctl` is optional, but when present it is used to improve disk family detection and to show overall SMART pass/fail status.
+- The startup update check contacts `git.skobk.in` once and fails silently; `--no-update-check` skips it and `u` in the disk list always works on demand. Development builds (`--version` prints `dev`) never check at startup.
 
 ## Build
 
