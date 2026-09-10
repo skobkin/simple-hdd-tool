@@ -311,3 +311,47 @@ func TestUpdateModalClosesToTable(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateModalScrollsLongChangelog(t *testing.T) {
+	stub := &stubUpdateChecker{result: availableUpdateInfo()}
+	m := newUpdatesTestModel(t, stub)
+	m.height = 10 // box frame (2) + title, separator, blank, hint → 4 body lines
+	m.mode = viewUpdates
+	m.updateResult = &stub.result
+
+	view := ansi.Strip(m.renderUpdates())
+	if !strings.Contains(view, "Version 0.9.0 is available") {
+		t.Errorf("update modal = %q, want the status line at the top", view)
+	}
+	if strings.Contains(view, "Download:") {
+		t.Errorf("update modal = %q, want the download line clipped until scrolled", view)
+	}
+	if !strings.Contains(view, "scroll (4/8)") {
+		t.Errorf("update modal = %q, want the scroll position hint", view)
+	}
+
+	m.handleKey(keyPress(tea.KeyEnd, "", 0))
+	view = ansi.Strip(m.renderUpdates())
+	if !strings.Contains(view, "Download: "+stub.result.LatestURL) {
+		t.Errorf("update modal = %q, want the download line after scrolling to the end", view)
+	}
+	if !strings.Contains(view, "Releases: "+stub.result.ReleasesURL) {
+		t.Errorf("update modal = %q, want the releases line after scrolling to the end", view)
+	}
+	if strings.Contains(view, "Version 0.9.0 is available") {
+		t.Errorf("update modal = %q, want the status line scrolled out of view", view)
+	}
+	if m.updateScroll != 4 {
+		t.Fatalf("updateScroll = %d, want 4 at the end of the body", m.updateScroll)
+	}
+
+	m.handleKey(keyPress(tea.KeyEscape, "", 0))
+	if m.mode != viewTable {
+		t.Fatalf("mode = %v, want viewTable", m.mode)
+	}
+
+	m.showUpdateModal()
+	if m.updateScroll != 0 {
+		t.Errorf("updateScroll = %d, want it reset when the modal reopens", m.updateScroll)
+	}
+}

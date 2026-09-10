@@ -109,6 +109,7 @@ type Model struct {
 	updateResult   *updates.Info
 	updateErr      error
 	pendingUpdates bool
+	updateScroll   int
 
 	styles styles
 }
@@ -211,6 +212,7 @@ func (m *Model) showUpdateModal() {
 
 		return
 	}
+	m.updateScroll = 0
 	m.mode = viewUpdates
 }
 
@@ -308,6 +310,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clampDetailScroll()
+		m.clampUpdateScroll()
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	case scanProgressMsg:
@@ -459,9 +462,22 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case viewUpdates:
-		if msg.String() == "enter" || msg.String() == "esc" || msg.String() == "q" {
+		switch msg.String() {
+		case "enter", "esc", "q":
 			m.returnToTable()
 			m.updateErr = nil
+		case "up":
+			m.scrollUpdates(-1)
+		case "down":
+			m.scrollUpdates(1)
+		case "pgup":
+			m.scrollUpdates(-m.updatePageSize())
+		case "pgdown":
+			m.scrollUpdates(m.updatePageSize())
+		case "home":
+			m.updateScroll = 0
+		case "end":
+			m.updateScroll = m.maxUpdateScroll()
 		}
 
 		return m, nil
@@ -624,6 +640,35 @@ func (m *Model) scrollDetails(delta int) {
 
 	m.detailScroll += delta
 	m.clampDetailScroll()
+}
+
+func (m *Model) scrollUpdates(delta int) {
+	if delta == 0 {
+		return
+	}
+
+	m.updateScroll += delta
+	m.clampUpdateScroll()
+}
+
+func (m *Model) updatePageSize() int {
+	height := m.updateBodyHeight()
+	if height < 1 {
+		return 1
+	}
+
+	return height
+}
+
+func (m *Model) clampUpdateScroll() {
+	if m.updateScroll < 0 {
+		m.updateScroll = 0
+	}
+
+	maxScroll := m.maxUpdateScroll()
+	if m.updateScroll > maxScroll {
+		m.updateScroll = maxScroll
+	}
 }
 
 func (m *Model) detailPageSize() int {

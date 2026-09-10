@@ -449,6 +449,38 @@ func (m *Model) detailShowHelp() bool {
 	return m.height-m.styles.box.GetVerticalFrameSize() >= 4
 }
 
+// updateBodyHeight returns how many modal body lines fit on screen: the box
+// frame, title, blank separator, and the pinned hint line are subtracted.
+func (m *Model) updateBodyHeight() int {
+	if m.height <= 0 {
+		return 1 << 20
+	}
+
+	bodyHeight := m.height - m.styles.box.GetVerticalFrameSize() - 4
+	if bodyHeight < 0 {
+		return 0
+	}
+
+	return bodyHeight
+}
+
+func (m *Model) maxUpdateScroll() int {
+	if m.updateResult == nil {
+		return 0
+	}
+	bodyHeight := m.updateBodyHeight()
+	if bodyHeight < 1 {
+		return 0
+	}
+
+	total := len(m.updateBodyLines(*m.updateResult))
+	if total <= bodyHeight {
+		return 0
+	}
+
+	return total - bodyHeight
+}
+
 func wrapLines(lines []string, width int) []string {
 	if width < 1 {
 		return lines
@@ -568,7 +600,8 @@ func (m *Model) updateBanner() string {
 }
 
 // renderUpdates renders the update details modal: status, changelog for
-// releases newer than the running version, and the download location.
+// releases newer than the running version, and the download location. The
+// body scrolls when the release notes exceed the terminal height.
 func (m *Model) renderUpdates() string {
 	if m.updateErr != nil {
 		return m.wrapModal("Update Check", []string{
@@ -586,7 +619,30 @@ func (m *Model) renderUpdates() string {
 	}
 
 	title := "Update Check"
-	lines := m.updateStatusLines(*result)
+	if result.UpdateAvailable() {
+		title = "Update Available"
+	}
+
+	body := m.updateBodyLines(*result)
+	m.clampUpdateScroll()
+	bodyHeight := m.updateBodyHeight()
+	scrollTop := minInt(m.updateScroll, len(body))
+	scrollBottom := minInt(scrollTop+bodyHeight, len(body))
+	lines := append([]string(nil), body[scrollTop:scrollBottom]...)
+
+	hint := "Press Enter, Esc, or q to close."
+	if len(body) > bodyHeight && m.height > 0 {
+		hint = fmt.Sprintf("Up/Down/PgUp/PgDn scroll (%d/%d)  Enter/Esc/q close", scrollBottom, len(body))
+	}
+	lines = append(lines, "", hint)
+
+	return m.wrapModal(title, lines)
+}
+
+// updateBodyLines builds the scrollable modal content: status, changelog, and
+// download locations, wrapped to the modal width.
+func (m *Model) updateBodyLines(result updates.Info) []string {
+	lines := m.updateStatusLines(result)
 	if result.Changelog != "" {
 		lines = append(lines, "")
 		lines = append(lines, m.renderChangelogLines(result.Changelog)...)
@@ -597,12 +653,8 @@ func (m *Model) renderUpdates() string {
 	if result.ReleasesURL != "" {
 		lines = append(lines, "Releases: "+result.ReleasesURL)
 	}
-	lines = append(lines, "", "Press Enter, Esc, or q to close.")
-	if result.UpdateAvailable() {
-		title = "Update Available"
-	}
 
-	return m.wrapModal(title, wrapLines(lines, m.modalInnerWidth()))
+	return wrapLines(lines, m.modalInnerWidth())
 }
 
 // updateStatusLines renders the human-readable outcome of one check.
