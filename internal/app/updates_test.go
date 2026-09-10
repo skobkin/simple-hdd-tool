@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/skobkin/simple-hdd-tool/internal/buildinfo"
 	"github.com/skobkin/simple-hdd-tool/internal/updates"
@@ -309,6 +310,34 @@ func TestUpdateModalClosesToTable(t *testing.T) {
 				t.Errorf("updateErr = %v, want it cleared", m.updateErr)
 			}
 		})
+	}
+}
+
+func TestUpdateModalFitsNarrowTerminal(t *testing.T) {
+	stub := &stubUpdateChecker{result: availableUpdateInfo()}
+	m := newUpdatesTestModel(t, stub)
+	m.width = 40
+	m.height = 10
+	m.mode = viewUpdates
+	m.updateResult = &stub.result
+
+	plain := ansi.Strip(m.renderUpdates())
+	lines := strings.Split(plain, "\n")
+	if len(lines) > m.height {
+		t.Fatalf("update modal rendered %d rows, want at most %d", len(lines), m.height)
+	}
+	for _, line := range lines {
+		if width := runewidth.StringWidth(line); width > m.width {
+			t.Fatalf("update modal line %q is %d columns, want at most %d", line, width, m.width)
+		}
+	}
+	if !strings.Contains(plain, "Enter/Esc/q") {
+		t.Errorf("update modal = %q, want a visible close hint", plain)
+	}
+
+	m.handleKey(keyPress(tea.KeyEnd, "", 0))
+	if view := ansi.Strip(m.renderUpdates()); !strings.Contains(view, "Releases:") {
+		t.Errorf("update modal = %q, want the releases line after scrolling to the end", view)
 	}
 }
 

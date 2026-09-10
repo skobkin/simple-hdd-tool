@@ -450,13 +450,14 @@ func (m *Model) detailShowHelp() bool {
 }
 
 // updateBodyHeight returns how many modal body lines fit on screen: the box
-// frame, title, blank separator, and the pinned hint line are subtracted.
-func (m *Model) updateBodyHeight() int {
+// frame, title, blank separators, and hintLines wrapped hint rows are
+// subtracted.
+func (m *Model) updateBodyHeight(hintLines int) int {
 	if m.height <= 0 {
 		return 1 << 20
 	}
 
-	bodyHeight := m.height - m.styles.box.GetVerticalFrameSize() - 4
+	bodyHeight := m.height - m.styles.box.GetVerticalFrameSize() - 3 - hintLines
 	if bodyHeight < 0 {
 		return 0
 	}
@@ -468,17 +469,14 @@ func (m *Model) maxUpdateScroll() int {
 	if m.updateResult == nil {
 		return 0
 	}
-	bodyHeight := m.updateBodyHeight()
+
+	total := len(m.updateBodyLines(*m.updateResult))
+	_, bodyHeight := m.updateHint(total)
 	if bodyHeight < 1 {
 		return 0
 	}
 
-	total := len(m.updateBodyLines(*m.updateResult))
-	if total <= bodyHeight {
-		return 0
-	}
-
-	return total - bodyHeight
+	return maxInt(0, total-bodyHeight)
 }
 
 func wrapLines(lines []string, width int) []string {
@@ -624,19 +622,36 @@ func (m *Model) renderUpdates() string {
 	}
 
 	body := m.updateBodyLines(*result)
+	total := len(body)
 	m.clampUpdateScroll()
-	bodyHeight := m.updateBodyHeight()
-	scrollTop := minInt(m.updateScroll, len(body))
-	scrollBottom := minInt(scrollTop+bodyHeight, len(body))
-	lines := append([]string(nil), body[scrollTop:scrollBottom]...)
 
-	hint := "Press Enter, Esc, or q to close."
-	if len(body) > bodyHeight && m.height > 0 {
-		hint = fmt.Sprintf("Up/Down/PgUp/PgDn scroll (%d/%d)  Enter/Esc/q close", scrollBottom, len(body))
-	}
-	lines = append(lines, "", hint)
+	hint, bodyHeight := m.updateHint(total)
+	scrollTop := minInt(m.updateScroll, total)
+	scrollBottom := minInt(scrollTop+bodyHeight, total)
+	lines := append([]string(nil), body[scrollTop:scrollBottom]...)
+	lines = append(lines, "")
+	lines = append(lines, wrapLines([]string{hint}, m.modalInnerWidth())...)
 
 	return m.wrapModal(title, lines)
+}
+
+// updateHint picks the pinned hint line and the matching body viewport height
+// for a body of total lines: the plain close hint when everything fits,
+// otherwise a scroll indicator whose wrapped rows are subtracted from the
+// viewport so the whole modal stays inside the terminal.
+func (m *Model) updateHint(total int) (string, int) {
+	hint := "Press Enter, Esc, or q to close."
+	bodyHeight := m.updateBodyHeight(len(wrapLines([]string{hint}, m.modalInnerWidth())))
+	if total <= bodyHeight || m.height <= 0 {
+		return hint, bodyHeight
+	}
+
+	scrollHint := "Up/Down/PgUp/PgDn scroll (%d/%d)  Enter/Esc/q close"
+	// Reserve the wrapped rows at the widest numbers the indicator can show.
+	bodyHeight = maxInt(1, m.updateBodyHeight(len(wrapLines([]string{fmt.Sprintf(scrollHint, total, total)}, m.modalInnerWidth()))))
+	scrollBottom := minInt(m.updateScroll+bodyHeight, total)
+
+	return fmt.Sprintf(scrollHint, scrollBottom, total), bodyHeight
 }
 
 // updateBodyLines builds the scrollable modal content: status, changelog, and

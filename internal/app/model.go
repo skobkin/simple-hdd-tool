@@ -652,7 +652,11 @@ func (m *Model) scrollUpdates(delta int) {
 }
 
 func (m *Model) updatePageSize() int {
-	height := m.updateBodyHeight()
+	if m.updateResult == nil {
+		return 1
+	}
+
+	_, height := m.updateHint(len(m.updateBodyLines(*m.updateResult)))
 	if height < 1 {
 		return 1
 	}
