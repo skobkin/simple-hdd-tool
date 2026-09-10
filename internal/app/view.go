@@ -11,6 +11,7 @@ import (
 	"github.com/skobkin/simple-hdd-tool/internal/buildinfo"
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 	"github.com/skobkin/simple-hdd-tool/internal/format"
+	"github.com/skobkin/simple-hdd-tool/internal/updates"
 )
 
 // View renders the current Bubble Tea screen.
@@ -38,6 +39,8 @@ func (m *Model) viewContent() string {
 		return m.wrapModal("Status", []string{m.infoText, "Press Enter, Esc, or q to close."})
 	case viewReadLoad:
 		return m.renderReadLoad()
+	case viewUpdates:
+		return m.renderUpdates()
 	default:
 		return m.renderTable()
 	}
@@ -65,7 +68,10 @@ func (m *Model) renderTable() string {
 	if m.readOnly {
 		lines = append(lines, m.styles.banner.Render("READ-ONLY MODE: remove is disabled; write-required operations are unavailable"))
 	}
-	lines = append(lines, fmt.Sprintf("g Group:%s  s Sort:%s  r Refresh  Enter Details  q Quit  Ctrl+C Quit", m.cfg.GroupBy, m.cfg.SortBy))
+	if line := m.updateBanner(); line != "" {
+		lines = append(lines, line)
+	}
+	lines = append(lines, fmt.Sprintf("g Group:%s  s Sort:%s  r Refresh  u Updates  Enter Details  q Quit  Ctrl+C Quit", m.cfg.GroupBy, m.cfg.SortBy))
 	lines = append(lines, "")
 	lines = append(lines, m.renderColumns())
 	for idx, row := range m.rows {
@@ -546,6 +552,90 @@ func (m *Model) renderReadLoad() string {
 	)
 
 	return m.wrapModal("Read Load", wrapLines(lines, innerWidth))
+}
+
+// updateBanner renders the one-line update status above the table: a busy
+// notice while a check runs, an announcement when a newer release exists.
+func (m *Model) updateBanner() string {
+	if m.updateChecking {
+		return m.styles.faint.Render("Checking for updates…")
+	}
+	if m.updateResult == nil || !m.updateResult.UpdateAvailable() {
+		return ""
+	}
+
+	return m.styles.warn.Render(fmt.Sprintf("Update available: %s (current %s)  u Details", m.updateResult.LatestVersion, m.updateResult.CurrentVersion))
+}
+
+// renderUpdates renders the update details modal: status, changelog for
+// releases newer than the running version, and the download location.
+func (m *Model) renderUpdates() string {
+	if m.updateErr != nil {
+		return m.wrapModal("Update Check", []string{
+			"Update check failed: " + m.updateErr.Error(),
+			"Press Enter, Esc, or q to close.",
+		})
+	}
+
+	result := m.updateResult
+	if result == nil {
+		return m.wrapModal("Update Check", []string{
+			"No update check has completed yet.",
+			"Press Enter, Esc, or q to close.",
+		})
+	}
+
+	title := "Update Check"
+	lines := m.updateStatusLines(*result)
+	if result.Changelog != "" {
+		lines = append(lines, "")
+		lines = append(lines, m.renderChangelogLines(result.Changelog)...)
+	}
+	if result.LatestURL != "" {
+		lines = append(lines, "", "Download: "+result.LatestURL)
+	}
+	if result.ReleasesURL != "" {
+		lines = append(lines, "Releases: "+result.ReleasesURL)
+	}
+	lines = append(lines, "", "Press Enter, Esc, or q to close.")
+	if result.UpdateAvailable() {
+		title = "Update Available"
+	}
+
+	return m.wrapModal(title, wrapLines(lines, m.modalInnerWidth()))
+}
+
+// updateStatusLines renders the human-readable outcome of one check.
+func (m *Model) updateStatusLines(result updates.Info) []string {
+	switch result.Status {
+	case updates.StatusUpdateAvailable:
+		return []string{fmt.Sprintf("Version %s is available (current %s).", result.LatestVersion, result.CurrentVersion)}
+	case updates.StatusUpToDate:
+		return []string{fmt.Sprintf("%s is the latest release.", result.CurrentVersion)}
+	default:
+		lines := []string{fmt.Sprintf("Cannot compare running version %q with upstream releases.", result.CurrentVersion)}
+		if result.LatestVersion != "" {
+			lines = append(lines, "Latest release: "+result.LatestVersion)
+		}
+
+		return lines
+	}
+}
+
+// renderChangelogLines styles pre-rendered releasefmt changelog text: version
+// headings become headers and separators stay faint; bodies stay plain text.
+func (m *Model) renderChangelogLines(changelog string) []string {
+	lines := strings.Split(changelog, "\n")
+	for i, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "## "):
+			lines[i] = m.styles.header.Render(strings.TrimPrefix(line, "## "))
+		case strings.TrimSpace(line) == "---":
+			lines[i] = m.styles.faint.Render(line)
+		}
+	}
+
+	return lines
 }
 
 func (m *Model) wrapModal(title string, lines []string) string {

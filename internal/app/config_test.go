@@ -40,3 +40,21 @@ func TestParseConfigRejectsInvalidGroupBy(t *testing.T) {
 		t.Fatalf("expected invalid group-by error")
 	}
 }
+
+func TestParseConfigNoUpdateCheck(t *testing.T) {
+	cfg, err := ParseConfig(nil)
+	if err != nil {
+		t.Fatalf("ParseConfig returned error: %v", err)
+	}
+	if cfg.NoUpdateCheck {
+		t.Fatal("expected update checks to be enabled by default")
+	}
+
+	cfg, err = ParseConfig([]string{"--no-update-check"})
+	if err != nil {
+		t.Fatalf("ParseConfig returned error: %v", err)
+	}
+	if !cfg.NoUpdateCheck {
+		t.Fatal("expected --no-update-check to disable automatic checks")
+	}
+}

@@ -12,12 +12,13 @@ import (
 
 // Config holds CLI options that control grouping, sorting, and actions.
 type Config struct {
-	GroupBy     domain.GroupMode
-	SortBy      domain.SortMode
-	ForceRemove bool
-	NoColor     bool
-	ShowHelp    bool
-	ShowVersion bool
+	GroupBy       domain.GroupMode
+	SortBy        domain.SortMode
+	ForceRemove   bool
+	NoColor       bool
+	NoUpdateCheck bool
+	ShowHelp      bool
+	ShowVersion   bool
 }
 
 // ParseConfig parses command-line arguments into the application config.
@@ -35,6 +36,7 @@ func ParseConfig(args []string) (Config, error) {
 	fs.StringVar(&sortBy, "sort-by", string(cfg.SortBy), "")
 	fs.BoolVar(&cfg.ForceRemove, "force-remove", false, "")
 	fs.BoolVar(&cfg.NoColor, "no-color", false, "")
+	fs.BoolVar(&cfg.NoUpdateCheck, "no-update-check", false, "")
 	fs.BoolVar(&cfg.ShowHelp, "help", false, "")
 	fs.BoolVar(&cfg.ShowVersion, "version", false, "")
 	if err := fs.Parse(args); err != nil {
@@ -69,6 +71,6 @@ func HelpText() string {
 	return buildinfo.AppName + `
 
 Usage:
-  ` + buildinfo.AppName + ` [--group-by=model|size|family|none] [--sort-by=size|serial|hours] [--force-remove] [--no-color] [--version]
+  ` + buildinfo.AppName + ` [--group-by=model|size|family|none] [--sort-by=size|serial|hours] [--force-remove] [--no-color] [--no-update-check] [--version]
 `
 }

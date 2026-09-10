@@ -10,13 +10,27 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/skobkin/simple-hdd-tool/internal/buildinfo"
 	"github.com/skobkin/simple-hdd-tool/internal/domain"
 	"github.com/skobkin/simple-hdd-tool/internal/format"
 	"github.com/skobkin/simple-hdd-tool/internal/linux"
+	"github.com/skobkin/simple-hdd-tool/internal/updates"
 )
 
 var startReadLoad = linux.StartReadLoad
 var snapshotReadLoad = func(loader *linux.ReadLoader) domain.ReadLoadSnapshot { return loader.Snapshot() }
+
+// updateChecker is the seam between the UI and the update checker; the
+// production implementation is *updates.Checker and tests substitute a stub.
+type updateChecker interface {
+	Check(ctx context.Context) (updates.Info, error)
+}
+
+// newUpdateChecker builds the production update checker; kept as a variable so
+// tests can stub construction without a Forgejo server.
+var newUpdateChecker = func(currentVersion string) (updateChecker, error) {
+	return updates.New(updates.Options{CurrentVersion: currentVersion})
+}
 
 type viewMode int
 
@@ -28,6 +42,7 @@ const (
 	viewInfo
 	viewReadLoad
 	viewRemoving
+	viewUpdates
 )
 
 type scanProgressMsg domain.ScanProgress
@@ -35,6 +50,12 @@ type scanCompleteMsg domain.ScanResult
 type removeProgressMsg domain.RemovalProgress
 type removeCompleteMsg domain.RemovalResult
 type readLoadTickMsg struct{}
+
+type updateCheckDoneMsg struct {
+	result updates.Info
+	err    error
+	manual bool
+}
 
 type scanRunner struct {
 	progress chan domain.ScanProgress
@@ -83,6 +104,11 @@ type Model struct {
 	detailAction   detailAction
 	detailScroll   int
 
+	updateChecker  updateChecker
+	updateChecking bool
+	updateResult   *updates.Info
+	updateErr      error
+
 	styles styles
 }
 
@@ -103,11 +129,16 @@ type styles struct {
 
 // NewModel builds the initial UI model from CLI config.
 func NewModel(cfg Config) *Model {
-	return &Model{
+	model := &Model{
 		cfg:    cfg,
 		mode:   viewScanning,
 		styles: newStyles(cfg.NoColor),
 	}
+	if checker, err := newUpdateChecker(buildinfo.Version); err == nil {
+		model.updateChecker = checker
+	}
+
+	return model
 }
 
 // SetAltScreen configures whether the app should render in the terminal alternate screen.
@@ -149,9 +180,41 @@ func newStyles(noColor bool) styles {
 	}
 }
 
-// Init starts the initial disk scan.
+// Init starts the initial disk scan and, when enabled, the startup update
+// check.
 func (m *Model) Init() tea.Cmd {
+	if m.updateChecker != nil && autoUpdateEnabled(m.cfg, buildinfo.Version) {
+		return tea.Batch(m.startScan(), m.startUpdateCheck(false))
+	}
+
 	return m.startScan()
+}
+
+// autoUpdateEnabled reports whether the startup update check should run: never
+// on development builds, otherwise per the --no-update-check config.
+func autoUpdateEnabled(cfg Config, version string) bool {
+	if version == buildinfo.DevVersion {
+		return false
+	}
+
+	return !cfg.NoUpdateCheck
+}
+
+// startUpdateCheck issues one update check; manual marks a user-requested
+// check so its result, including failures, is presented in the update modal.
+func (m *Model) startUpdateCheck(manual bool) tea.Cmd {
+	if m.updateChecker == nil || m.updateChecking {
+		return nil
+	}
+	m.updateChecking = true
+	m.updateErr = nil
+	checker := m.updateChecker
+
+	return func() tea.Msg {
+		result, err := checker.Check(context.Background())
+
+		return updateCheckDoneMsg{result: result, err: err, manual: manual}
+	}
 }
 
 func (m *Model) startScan() tea.Cmd {
@@ -262,6 +325,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, readLoadTick()
 		}
+	case updateCheckDoneMsg:
+		m.updateChecking = false
+		if msg.err != nil {
+			if msg.manual {
+				m.updateErr = msg.err
+				m.mode = viewUpdates
+			}
+
+			return m, nil
+		}
+		result := msg.result
+		m.updateResult = &result
+		if msg.manual {
+			m.mode = viewUpdates
+		}
 	}
 
 	return m, nil
@@ -350,6 +428,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 		return m, nil
+	case viewUpdates:
+		if msg.String() == "enter" || msg.String() == "esc" || msg.String() == "q" {
+			m.mode = viewTable
+			m.updateErr = nil
+		}
+
+		return m, nil
 	}
 
 	switch msg.String() {
@@ -386,6 +471,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.scanProgress = domain.ScanProgress{}
 
 		return m, m.startScan()
+	case "u":
+		if m.updateChecker == nil {
+			m.mode = viewInfo
+			m.infoText = "Update checking is unavailable"
+
+			return m, nil
+		}
+
+		return m, m.startUpdateCheck(true)
 	case "enter":
 		if m.selectedDisk() != nil {
 			m.detailAction = detailActionClose

@@ -15,7 +15,7 @@ func TestHelpTextContainsUsageAndFlags(t *testing.T) {
 	t.Parallel()
 
 	text := HelpText()
-	if !strings.Contains(text, "Usage:") || !strings.Contains(text, "--group-by") || !strings.Contains(text, "--sort-by") {
+	if !strings.Contains(text, "Usage:") || !strings.Contains(text, "--group-by") || !strings.Contains(text, "--sort-by") || !strings.Contains(text, "--no-update-check") {
 		t.Fatalf("HelpText() = %q", text)
 	}
 }
